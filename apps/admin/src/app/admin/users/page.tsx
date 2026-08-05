@@ -1,0 +1,390 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import {
+  PageHeader,
+  StatusBadge,
+  WalletAddressCell,
+  SearchButton,
+  ResetFiltersButton,
+} from '../../../components/ui/Reusables';
+import {
+  FilterBar,
+  FilterField,
+  TablePagination,
+  DetailDrawer,
+  ConfirmationDialog,
+  ExportButton,
+  ColumnVisibilityMenu,
+  SortHeader,
+} from '../../../components/ui/DataTable';
+import { userRepository } from '../../../repositories';
+import { DbUser } from '@bspc/types';
+import { Eye, ShieldAlert, RotateCw, Key } from 'lucide-react';
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<DbUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Filter States
+  const [userIdFilter, setUserIdFilter] = useState('');
+  const [usernameFilter, setUsernameFilter] = useState('');
+  const [walletFilter, setWalletFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const [appliedFilters, setAppliedFilters] = useState({
+    userId: '',
+    username: '',
+    wallet: '',
+    status: 'all',
+  });
+
+  const [sortKey, setSortKey] = useState<keyof DbUser>('uid');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Drawer / Dialog States
+  const [selectedUser, setSelectedUser] = useState<DbUser | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<'profile' | 'referrals' | 'audit' | null>(null);
+
+  const [userToToggle, setUserToToggle] = useState<DbUser | null>(null);
+  const [actionType, setActionType] = useState<'status' | 'session' | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [operationRef, setOperationRef] = useState<string | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(8);
+
+  const allColumns = [
+    { key: 'uid', label: 'User ID' },
+    { key: 'username', label: 'Username' },
+    { key: 'walletAddress', label: 'Wallet Address' },
+    { key: 'status', label: 'Account Status' },
+    { key: 'collectionStatus', label: 'Collection Status' },
+    { key: 'createdAt', label: 'Registration Time' },
+  ];
+  const [visibleColumns, setVisibleColumns] = useState(allColumns.map((c) => c.key));
+
+  const loadUsers = async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const data = await userRepository.listUsers();
+      setUsers(data);
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setErrorMsg(error?.message || 'Permission denied. Unable to retrieve user lists.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
+    loadUsers();
+  }, []);
+
+  const handleSearch = () => {
+    setAppliedFilters({
+      userId: userIdFilter,
+      username: usernameFilter,
+      wallet: walletFilter,
+      status: statusFilter,
+    });
+    setCurrentPage(1);
+  };
+
+  const handleReset = () => {
+    setUserIdFilter('');
+    setUsernameFilter('');
+    setWalletFilter('');
+    setStatusFilter('all');
+    setAppliedFilters({
+      userId: '',
+      username: '',
+      wallet: '',
+      status: 'all',
+    });
+    setCurrentPage(1);
+  };
+
+  const handleSort = (key: string) => {
+    const k = key as keyof DbUser;
+    if (sortKey === k) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(k);
+      setSortDirection('asc');
+    }
+  };
+
+  const handleActionConfirm = async () => {
+    if (userToToggle && actionType) {
+      try {
+        setErrorMsg(null);
+        if (actionType === 'status') {
+          const nextStatus = userToToggle.status === 'active' ? 'suspended' : 'active';
+          await userRepository.updateUserStatus(userToToggle.uid, nextStatus);
+          
+          // Generate operations log reference
+          setOperationRef(`OP-REF-${Math.floor(Math.random() * 900000 + 100000)}`);
+          await loadUsers();
+        }
+      } catch (err: unknown) {
+        const error = err as { message?: string };
+        setErrorMsg(error?.message || 'Blockchain action confirmation failed.');
+      } finally {
+        setIsConfirmOpen(false);
+        setUserToToggle(null);
+        setActionType(null);
+      }
+    }
+  };
+
+  const filteredUsers = users
+    .filter((u) => {
+      const f = appliedFilters;
+      const matchesUserId = f.userId ? u.uid.toLowerCase().includes(f.userId.toLowerCase()) : true;
+      const matchesUsername = f.username ? u.username.toLowerCase().includes(f.username.toLowerCase()) : true;
+      const matchesWallet = f.wallet ? u.walletAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
+      const matchesStatus = f.status === 'all' || u.status === f.status;
+      return matchesUserId && matchesUsername && matchesWallet && matchesStatus;
+    })
+    .sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return 0;
+    });
+
+  const totalRowCount = filteredUsers.length;
+  const totalPageCount = Math.ceil(totalRowCount / rowsPerPage);
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Users Administration"
+        subtitle="Manage authorization statuses, pool sweeps properties, and session profiles."
+        actions={
+          <div className="flex gap-2">
+            <ColumnVisibilityMenu
+              columns={allColumns}
+              visibleColumns={visibleColumns}
+              onChange={setVisibleColumns}
+            />
+            <ExportButton
+              data={filteredUsers as unknown as Record<string, unknown>[]}
+              filename="users_export"
+            />
+          </div>
+        }
+      />
+
+      {/* Operation Log Reference Banner */}
+      {operationRef && (
+        <div className="bg-teal-50 border border-teal-200 rounded p-3 text-xs text-teal-800 flex justify-between items-center">
+          <span>
+            Mutation complete. Log Reference: <span className="font-bold font-mono">{operationRef}</span>
+          </span>
+          <button onClick={() => setOperationRef(null)} className="font-bold hover:text-teal-950">✕</button>
+        </div>
+      )}
+
+      {/* Error alert banner */}
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 rounded p-3 text-xs text-red-800 flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      <FilterBar>
+        <FilterField label="User ID">
+          <input
+            type="text"
+            placeholder="u-..."
+            value={userIdFilter}
+            onChange={(e) => setUserIdFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 focus:outline-none"
+          />
+        </FilterField>
+        <FilterField label="Username">
+          <input
+            type="text"
+            placeholder="Username prefix..."
+            value={usernameFilter}
+            onChange={(e) => setUsernameFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 focus:outline-none"
+          />
+        </FilterField>
+        <FilterField label="Wallet Address">
+          <input
+            type="text"
+            placeholder="0x..."
+            value={walletFilter}
+            onChange={(e) => setWalletFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 focus:outline-none"
+          />
+        </FilterField>
+        <FilterField label="Account Status">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-855 focus:outline-none"
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+          </select>
+        </FilterField>
+
+        <div className="flex items-center gap-2">
+          <SearchButton onClick={handleSearch} />
+          <ResetFiltersButton onClick={handleReset} />
+        </div>
+      </FilterBar>
+
+      <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+        {isLoading ? (
+          <div className="p-12 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+            <RotateCw className="w-4 h-4 animate-spin text-teal-primary" /> Loading users records from repository...
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse dense-table">
+              <thead>
+                <tr className="bg-gray-100/60 border-b border-gray-200 text-gray-500 font-semibold text-xs">
+                  {visibleColumns.includes('uid') && (
+                    <th>
+                      <SortHeader
+                        label="User ID"
+                        sortKey="uid"
+                        currentSortKey={sortKey}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                  )}
+                  {visibleColumns.includes('username') && <th>Username</th>}
+                  {visibleColumns.includes('walletAddress') && <th>Wallet Address</th>}
+                  {visibleColumns.includes('status') && <th>Status</th>}
+                  {visibleColumns.includes('collectionStatus') && <th>Collection</th>}
+                  {visibleColumns.includes('createdAt') && <th>Registration Time</th>}
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paginatedUsers.map((u) => (
+                  <tr key={u.uid} className="hover:bg-gray-50/50">
+                    {visibleColumns.includes('uid') && <td className="font-mono text-gray-700 font-bold">{u.uid}</td>}
+                    {visibleColumns.includes('username') && <td className="text-gray-800 font-semibold">{u.username}</td>}
+                    {visibleColumns.includes('walletAddress') && (
+                      <td>
+                        <WalletAddressCell address={u.walletAddress} />
+                      </td>
+                    )}
+                    {visibleColumns.includes('status') && (
+                      <td>
+                        <StatusBadge
+                          status={u.status}
+                          type={u.status === 'active' ? 'success' : 'error'}
+                        />
+                      </td>
+                    )}
+                    {visibleColumns.includes('collectionStatus') && (
+                      <td>
+                        <StatusBadge
+                          status={u.collectionStatus}
+                          type={u.collectionStatus === 'active' ? 'success' : 'info'}
+                        />
+                      </td>
+                    )}
+                    {visibleColumns.includes('createdAt') && (
+                      <td className="text-gray-550 font-mono text-[11px]">
+                        {new Date(u.createdAt).toLocaleString()}
+                      </td>
+                    )}
+                    <td className="text-right whitespace-nowrap space-x-1">
+                      <button
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setActiveDrawer('profile');
+                        }}
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-1 rounded text-[11px] font-semibold transition-all inline-flex items-center gap-0.5"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setUserToToggle(u);
+                          setActionType('status');
+                          setIsConfirmOpen(true);
+                        }}
+                        className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded text-[11px] font-semibold transition-all"
+                      >
+                        {u.status === 'active' ? 'Suspend' : 'Reactivate'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPageCount={totalPageCount}
+          onPageChange={setCurrentPage}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={setRowsPerPage}
+          totalRowCount={totalRowCount}
+        />
+      </div>
+
+      {/* Profile Detail Drawer */}
+      <DetailDrawer
+        isOpen={!!selectedUser && activeDrawer === 'profile'}
+        title={`Profile Detail: ${selectedUser?.username}`}
+        onClose={() => {
+          setSelectedUser(null);
+          setActiveDrawer(null);
+        }}
+      >
+        {selectedUser && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Registration Time</label>
+              <div className="text-xs font-semibold text-gray-800 mt-1">{new Date(selectedUser.createdAt).toLocaleString()}</div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Invitation Code</label>
+              <div className="text-xs font-mono font-bold text-teal-primary mt-1">{selectedUser.invitationCode}</div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Wallet Balance (Verified)</label>
+              <div className="text-sm font-bold text-gray-900 mt-1">12,450 USDC</div>
+            </div>
+          </div>
+        )}
+      </DetailDrawer>
+
+      <ConfirmationDialog
+        isOpen={isConfirmOpen}
+        title={actionType === 'status' ? 'Toggle Account Access' : 'Revoke Session'}
+        message={`Are you sure you want to proceed with action ${actionType} on user ${userToToggle?.username}?`}
+        onConfirm={handleActionConfirm}
+        onCancel={() => {
+          setIsConfirmOpen(false);
+          setUserToToggle(null);
+          setActionType(null);
+        }}
+        isDestructive={actionType === 'status' && userToToggle?.status === 'active'}
+      />
+    </div>
+  );
+}

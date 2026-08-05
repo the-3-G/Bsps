@@ -1,0 +1,26 @@
+{
+  "name": "bspc-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authorized Crypto Admin Dashboard & DApp Monorepo",
+  "scripts": {
+    "dev": "pnpm --filter dapp dev",
+    "dev:admin": "pnpm --filter admin dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.0.1",
+    "@typescript-eslint/parser": "^8.0.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^9.8.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.10"
+  }
+}

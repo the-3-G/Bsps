@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+lib/
+build/
+
+# Environment files — never commit secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+functions-debug.log
+
+# Service account keys — NEVER commit
+*-service-account*.json
+*-adminsdk*.json
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor artifacts
+.vscode/
+.idea/
+
+# pnpm
+.pnpm-store/
+
+# Test coverage
+coverage/
+node_modules

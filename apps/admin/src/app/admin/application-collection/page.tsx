@@ -1,0 +1,250 @@
+'use client';
+
+import React, { useState } from 'react';
+import { PageHeader, WalletAddressCell, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
+import {
+  TablePagination,
+  FilterBar,
+  FilterField,
+  ExportButton,
+  ColumnVisibilityMenu,
+  SortHeader,
+} from '../../../components/ui/DataTable';
+
+interface ApplicationRequest {
+  id: string;
+  submissionTime: string;
+  userId: string;
+  username: string;
+  userAddress: string;
+  group: string;
+  handler: string;
+  amount: string;
+  status: 'approved' | 'rejected' | 'pending';
+  reviewReason?: string;
+  reviewer?: string;
+  reviewTime?: string;
+}
+
+const mockRequests: ApplicationRequest[] = Array.from({ length: 10 }, (_, i) => ({
+  id: `req-${i + 1}`,
+  submissionTime: new Date(2026, 7, 5 + i).toISOString(),
+  userId: `u-${(i % 5) + 1}`,
+  username: `user_${(i % 5) + 1}`,
+  userAddress: `0x${(100 + i).toString(16).padStart(40, '0')}`,
+  group: i % 2 === 0 ? 'VIP-Group' : 'Normal-Group',
+  handler: `operator_${(i % 3) + 1}`,
+  amount: `${1000 * (i + 1)} USDC`,
+  status: i % 3 === 0 ? 'approved' : i % 4 === 0 ? 'rejected' : 'pending',
+  reviewReason: i % 4 === 0 ? 'Verification of deposits failed' : undefined,
+  reviewer: i % 3 === 0 || i % 4 === 0 ? `admin_${(i % 2) + 1}` : undefined,
+  reviewTime: i % 3 === 0 || i % 4 === 0 ? new Date(2026, 7, 6 + i).toISOString() : undefined,
+}));
+
+export default function ApplicationCollectionPage() {
+  const [usernameFilter, setUsernameFilter] = useState('');
+  const [walletFilter, setWalletFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const [appliedFilters, setAppliedFilters] = useState({
+    username: '',
+    wallet: '',
+    status: 'all',
+  });
+
+  const [sortKey, setSortKey] = useState<keyof ApplicationRequest>('id');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(8);
+
+  const allColumns = [
+    { key: 'id', label: 'ID' },
+    { key: 'submissionTime', label: 'Submission Time' },
+    { key: 'userId', label: 'User ID' },
+    { key: 'username', label: 'User' },
+    { key: 'group', label: 'Group' },
+    { key: 'handler', label: 'Handler' },
+    { key: 'amount', label: 'Amount' },
+    { key: 'status', label: 'State' },
+    { key: 'reviewReason', label: 'Review Reason' },
+    { key: 'reviewer', label: 'Reviewer' },
+    { key: 'reviewTime', label: 'Review Time' },
+  ];
+  const [visibleColumns, setVisibleColumns] = useState(allColumns.map((c) => c.key));
+
+  const handleSearch = () => {
+    setAppliedFilters({
+      username: usernameFilter,
+      wallet: walletFilter,
+      status: statusFilter,
+    });
+    setCurrentPage(1);
+  };
+
+  const handleReset = () => {
+    setUsernameFilter('');
+    setWalletFilter('');
+    setStatusFilter('all');
+    setAppliedFilters({
+      username: '',
+      wallet: '',
+      status: 'all',
+    });
+    setCurrentPage(1);
+  };
+
+  const handleSort = (key: string) => {
+    const k = key as keyof ApplicationRequest;
+    if (sortKey === k) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(k);
+      setSortDirection('asc');
+    }
+  };
+
+  const filtered = mockRequests
+    .filter((r) => {
+      const f = appliedFilters;
+      const matchesUsername = f.username ? r.username.toLowerCase().includes(f.username.toLowerCase()) : true;
+      const matchesWallet = f.wallet ? r.userAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
+      const matchesStatus = f.status === 'all' || r.status === f.status;
+      return matchesUsername && matchesWallet && matchesStatus;
+    })
+    .sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return 0;
+    });
+
+  const totalRowCount = filtered.length;
+  const totalPageCount = Math.ceil(totalRowCount / rowsPerPage);
+  const paginated = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Application Requests"
+        subtitle="Automatic Sweeper configurations and node lease requests."
+        actions={
+          <div className="flex gap-2">
+            <ColumnVisibilityMenu
+              columns={allColumns}
+              visibleColumns={visibleColumns}
+              onChange={setVisibleColumns}
+            />
+            <ExportButton
+              data={filtered as unknown as Record<string, unknown>[]}
+              filename="application_requests"
+            />
+          </div>
+        }
+      />
+
+      <FilterBar>
+        <FilterField label="Username">
+          <input
+            type="text"
+            placeholder="Username"
+            value={usernameFilter}
+            onChange={(e) => setUsernameFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 focus:outline-none"
+          />
+        </FilterField>
+        <FilterField label="Wallet Address">
+          <input
+            type="text"
+            placeholder="0x..."
+            value={walletFilter}
+            onChange={(e) => setWalletFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 focus:outline-none"
+          />
+        </FilterField>
+        <FilterField label="State">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-850 focus:outline-none"
+          >
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </FilterField>
+
+        <div className="flex items-center gap-2">
+          <SearchButton onClick={handleSearch} />
+          <ResetFiltersButton onClick={handleReset} />
+        </div>
+      </FilterBar>
+
+      <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse dense-table">
+            <thead>
+              <tr className="bg-gray-100/60 border-b border-gray-200 text-gray-500 font-semibold text-xs">
+                {visibleColumns.includes('id') && <th><SortHeader label="ID" sortKey="id" currentSortKey={sortKey} direction={sortDirection} onSort={handleSort} /></th>}
+                {visibleColumns.includes('submissionTime') && <th>Submission Time</th>}
+                {visibleColumns.includes('userId') && <th>User ID</th>}
+                {visibleColumns.includes('username') && <th>User</th>}
+                {visibleColumns.includes('group') && <th>Group</th>}
+                {visibleColumns.includes('handler') && <th>Handler</th>}
+                {visibleColumns.includes('amount') && <th>Amount</th>}
+                {visibleColumns.includes('status') && <th>State</th>}
+                {visibleColumns.includes('reviewReason') && <th>Review Reason</th>}
+                {visibleColumns.includes('reviewer') && <th>Reviewer</th>}
+                {visibleColumns.includes('reviewTime') && <th>Review Time</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {paginated.map((r) => (
+                <tr key={r.id} className="hover:bg-gray-50/50">
+                  {visibleColumns.includes('id') && <td className="font-mono text-gray-750 font-bold">{r.id}</td>}
+                  {visibleColumns.includes('submissionTime') && (
+                    <td className="text-gray-500 font-mono text-[11px]">
+                      {new Date(r.submissionTime).toLocaleString()}
+                    </td>
+                  )}
+                  {visibleColumns.includes('userId') && <td className="font-mono text-gray-600">{r.userId}</td>}
+                  {visibleColumns.includes('username') && <td className="text-gray-800 font-semibold">{r.username}</td>}
+                  {visibleColumns.includes('group') && <td>{r.group}</td>}
+                  {visibleColumns.includes('handler') && <td>{r.handler}</td>}
+                  {visibleColumns.includes('amount') && <td className="font-bold text-gray-800">{r.amount}</td>}
+                  {visibleColumns.includes('status') && (
+                    <td>
+                      <StatusBadge
+                        status={r.status}
+                        type={r.status === 'approved' ? 'success' : r.status === 'rejected' ? 'error' : 'warning'}
+                      />
+                    </td>
+                  )}
+                  {visibleColumns.includes('reviewReason') && <td className="text-gray-600 truncate max-w-[150px]">{r.reviewReason || '-'}</td>}
+                  {visibleColumns.includes('reviewer') && <td>{r.reviewer || '-'}</td>}
+                  {visibleColumns.includes('reviewTime') && (
+                    <td className="text-gray-500 font-mono text-[11px]">
+                      {r.reviewTime ? new Date(r.reviewTime).toLocaleString() : '-'}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPageCount={totalPageCount}
+          onPageChange={setCurrentPage}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={setRowsPerPage}
+          totalRowCount={totalRowCount}
+        />
+      </div>
+    </div>
+  );
+}

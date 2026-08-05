@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bspc/types": ["packages/types/src"],
+      "@bspc/validation": ["packages/validation/src"],
+      "@bspc/firebase": ["packages/firebase/src"],
+      "@bspc/web3": ["packages/web3/src"],
+      "@bspc/ui": ["packages/ui/src"]
+    }
+  },
+  "exclude": ["node_modules"]
+}

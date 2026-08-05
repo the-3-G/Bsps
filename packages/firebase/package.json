@@ -1,0 +1,11 @@
+{
+  "name": "@bspc/firebase",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "firebase": "^10.12.5",
+    "firebase-admin": "^12.3.0"
+  }
+}
