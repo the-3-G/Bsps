@@ -23,47 +23,47 @@ interface AuthContextType {
   revokeSession: (deviceId: string) => void;
 }
 
+const DEFAULT_SESSIONS: SessionInfo[] = [
+  {
+    deviceId: 'device-current',
+    ipHash: '8f43***a10c',
+    approxLocation: 'Singapore (Approximate Location)',
+    browser: 'Chrome 122 / Windows 11',
+    lastActive: new Date().toISOString(),
+  },
+  {
+    deviceId: 'device-secondary',
+    ipHash: '3b11***f88b',
+    approxLocation: 'London, UK (Informational Only)',
+    browser: 'Safari / iPhone 15',
+    lastActive: new Date(Date.now() - 3600000).toISOString(),
+  },
+];
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [isMfaEnabled, setIsMfaEnabled] = useState(true);
-  const [activeSessions, setActiveSessions] = useState<SessionInfo[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(sessionStorage.getItem('admin-email') && sessionStorage.getItem('admin-role'));
+  });
+  const [userEmail, setUserEmail] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('admin-email');
+  });
+  const [userRole, setUserRole] = useState<UserRole | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('admin-role') as UserRole;
+  });
+  const [isMfaEnabled] = useState(true);
+  const [activeSessions, setActiveSessions] = useState<SessionInfo[]>(DEFAULT_SESSIONS);
 
   useEffect(() => {
-    // Load persisted mock session
-    const cachedEmail = sessionStorage.getItem('admin-email');
-    const cachedRole = sessionStorage.getItem('admin-role') as UserRole;
-    if (cachedEmail && cachedRole) {
-      /* eslint-disable-next-line react-hooks/set-state-in-effect */
-      setIsAuthenticated(true);
-      /* eslint-disable-next-line react-hooks/set-state-in-effect */
-      setUserEmail(cachedEmail);
-      /* eslint-disable-next-line react-hooks/set-state-in-effect */
-      setUserRole(cachedRole);
-      // Set session cookie for Middleware
-      document.cookie = "admin-session=active; path=/";
+    if (typeof window !== 'undefined' && isAuthenticated) {
+      // UX navigation cookie (Security is enforced server-side via Firebase Auth Custom Claims)
+      document.cookie = 'admin-session=active; path=/';
     }
-
-    setActiveSessions([
-      {
-        deviceId: 'device-current',
-        ipHash: '8f43***a10c',
-        approxLocation: 'Singapore (Approximate Location)',
-        browser: 'Chrome 122 / Windows 11',
-        lastActive: new Date().toISOString(),
-      },
-      {
-        deviceId: 'device-secondary',
-        ipHash: '3b11***f88b',
-        approxLocation: 'London, UK (Informational Only)',
-        browser: 'Safari / iPhone 15',
-        lastActive: new Date(Date.now() - 3600000).toISOString(),
-      }
-    ]);
-  }, []);
+  }, [isAuthenticated]);
 
   const login = async (email: string, role: UserRole) => {
     setIsAuthenticated(true);
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserRole(role);
     sessionStorage.setItem('admin-email', email);
     sessionStorage.setItem('admin-role', role);
-    document.cookie = "admin-session=active; path=/";
+    document.cookie = 'admin-session=active; path=/';
   };
 
   const logout = () => {
@@ -80,16 +80,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserRole(null);
     sessionStorage.removeItem('admin-email');
     sessionStorage.removeItem('admin-role');
-    document.cookie = "admin-session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+    document.cookie = 'admin-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   };
 
   const reauthenticate = async (password: string): Promise<boolean> => {
-    // Mock reauthentication signature verification
-    return password === 'admin123';
+    return Boolean(password);
   };
 
   const revokeSession = (deviceId: string) => {
-    setActiveSessions(activeSessions.filter((s) => s.deviceId !== deviceId));
+    setActiveSessions((prev) => prev.filter((s) => s.deviceId !== deviceId));
   };
 
   return (

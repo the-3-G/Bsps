@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import {
   PageHeader,
   StatusBadge,
-  WalletAddressCell,
   TransactionHashCell,
   SearchButton,
   ResetFiltersButton,
@@ -19,7 +18,7 @@ import {
   SortHeader,
 } from '../../../components/ui/DataTable';
 import { mockWithdrawals, MockWithdrawalRequest } from '../../../mocks/db';
-import { Check, X, ShieldAlert, FileText } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 export default function WithdrawalsPage() {
   const [userIdFilter, setUserIdFilter] = useState('');

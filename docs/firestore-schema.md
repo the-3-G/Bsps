@@ -1,102 +1,48 @@
-# Firestore Collections Schema
+# Firestore Collections Schema & Data Model
 
-This document details the schema definitions for Firestore collections, aligning types and field identifiers.
-
----
-
-## 1. `users/{uid}`
-- **Purpose**: Holds verified public Web3 profile state.
-- **Fields**:
-  - `uid`: `string` (Owner identifier) [Immutable]
-  - `walletAddress`: `string` (Checksummed EVM wallet address)
-  - `walletAddressLowercase`: `string` (Normalized address for querying)
-  - `username`: `string`
-  - `handle`: `string`
-  - `invitationCode`: `string` (Normalized name for refer code)
-  - `referredByUid`: `string | null`
-  - `status`: `'active' | 'suspended'`
-  - `collectionStatus`: `'active' | 'inactive'`
-  - `createdAt`: `string` (ISO Timestamp)
-  - `updatedAt`: `string`
-  - `lastLoginAt`: `string`
+This document provides the authoritative schema specification for Cloud Firestore collections in project `bspc-be4f8`.
 
 ---
 
-## 2. `adminProfiles/{uid}`
-- **Purpose**: Defines administrative profile access.
-- **Fields**:
-  - `uid`: `string` [Immutable]
-  - `displayName`: `string`
-  - `role`: `'super_admin' | 'operations_admin' | 'finance_reviewer' | 'support' | 'auditor' | 'read_only'`
-  - `status`: `'active' | 'suspended'`
-  - `mfaRequired`: `boolean`
+## Key Data Model Updates (Phase 6)
+
+1. **`walletChallenges/{challengeId}`**: Stored timestamps (`issuedAt`, `expiresAt`, `usedAt`, `createdAt`) use Firestore `Timestamp` objects. Stores `nonceHash` (SHA-256), `message` (EIP-4361 string), `domain`, `uri`, `status` (`'pending' | 'consumed' | 'expired' | 'revoked'`). Client read & write are strictly denied (`allow read, write: if false;`).
+2. **`loginEvents/{eventId}`**: Audit log of security authentication events (`eventType`: `'CHALLENGE_CREATED'`, `'LOGIN_SUCCESS'`, `'INVALID_SIGNATURE'`, `'UNSUPPORTED_CHAIN'`). Client writes are strictly denied (`allow create: if false;`).
+3. **`users/{uid}`**: User UID format for Web3 wallet users is `evm_<lowercase-address-without-0x>`. Custom claim set is `{ actorType: "wallet_user" }`. `createdAt` is preserved across logins.
 
 ---
 
-## 3. `walletChallenges/{challengeId}`
-- **Purpose**: One-time cryptographic challenge challenge validation.
+## Collection Definitions
+
+### `walletChallenges/{challengeId}`
+- **Purpose**: Server-managed challenge nonces for EIP-4361 wallet sign-in.
+- **Access Control**: Client read: DENIED (`if false`); Client write: DENIED (`if false`); Server-only.
 - **Fields**:
-  - `challengeId`: `string`
+  - `challengeId`: `string` [Immutable]
+  - `walletAddress`: `string` (EIP-55 checksummed)
+  - `walletAddressLowercase`: `string`
+  - `chainId`: `number` (Sepolia `11155111`)
+  - `nonceHash`: `string` (SHA-256 hash of plaintext nonce)
+  - `message`: `string` (Full EIP-4361 formatted string)
+  - `domain`: `string` (`bspc.io`)
+  - `uri`: `string` (`https://bspc.io`)
+  - `issuedAt`: `Timestamp`
+  - `expiresAt`: `Timestamp` (300 seconds TTL)
+  - `usedAt`: `Timestamp | null`
+  - `status`: `'pending' | 'consumed' | 'expired' | 'revoked'`
+  - `requestIpHash`: `string` (SHA-256 hash of IP)
+  - `userAgentHash`: `string` (SHA-256 hash of user agent)
+  - `createdAt`: `Timestamp`
+
+### `loginEvents/{eventId}`
+- **Purpose**: Audit log of login events and security alerts.
+- **Access Control**: Client read: Owner or Admin; Client write: DENIED (`if false`); Server-only.
+- **Fields**:
+  - `eventId`: `string` [Immutable]
+  - `eventType`: `string`
+  - `success`: `boolean`
   - `walletAddress`: `string`
-  - `nonceHash`: `string` (SHA-256 hashed nonce)
-  - `message`: `string`
-  - `chainId`: `number`
-  - `expiresAt`: `string`
-  - `usedAt`: `string | null`
-
----
-
-## 4. `pledges/{pledgeId}`
-- **Purpose**: Staking validator lease allocations.
-- **Fields**:
-  - `pledgeId`: `string`
-  - `userUid`: `string`
-  - `walletAddress`: `string`
-  - `principalBaseUnits`: `string` (Integer amount stored as string)
-  - `tier`: `string`
-  - `status`: `'mining' | 'completed' | 'withdrawn'`
-  - `startAt`: `string`
-  - `endAt`: `string`
-
----
-
-## 5. `withdrawalRequests/{requestId}`
-- **Purpose**: Sweeps payout audit requests ledger.
-- **Fields**:
-  - `requestId`: `string`
-  - `userUid`: `string`
-  - `walletAddress`: `string`
-  - `amountBaseUnits`: `string`
-  - `feeBaseUnits`: `string`
-  - `status`: `'pending' | 'approved' | 'rejected' | 'clarification' | 'submitted'`
-  - `reviewReason`: `string | null`
-  - `reviewedBy`: `string | null` (Matches display name of actor)
-  - `reviewedAt`: `string | null`
-
----
-
-## 6. `ledgerEntries/{entryId}`
-- **Purpose**: Immutable financial ledger tracking adjustments.
-- **Fields**:
-  - `entryId`: `string` [Immutable]
-  - `userUid`: `string`
-  - `walletAddress`: `string`
-  - `changeBaseUnits`: `string` (Base integer representation)
-  - `resultingBaseUnits`: `string`
   - `reasonCode`: `string`
-  - `actorUid`: `string`
-  - `createdAt`: `string`
-
----
-
-## 7. `adminAuditLogs/{logId}`
-- **Purpose**: Immutable admin actions logs.
-- **Fields**:
-  - `logId`: `string` [Immutable]
-  - `actorUid`: `string`
-  - `actorRole`: `string`
-  - `action`: `string`
-  - `targetType`: `string`
-  - `targetId`: `string`
-  - `reason`: `string`
-  - `createdAt`: `string`
+  - `ipHash`: `string`
+  - `userAgentSummary`: `string`
+  - `createdAt`: `Timestamp`

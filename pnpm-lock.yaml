@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@firebase/rules-unit-testing':
+        specifier: ^3.0.3
+        version: 3.0.4(firebase@10.14.1)
       '@types/node':
         specifier: ^26.1.2
         version: 26.1.2
@@ -35,6 +38,9 @@ importers:
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
+      viem:
+        specifier: ^2.19.4
+        version: 2.55.10(typescript@5.9.3)(zod@3.25.76)
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.2.0(@types/node@26.1.2)(jiti@2.7.0))
@@ -163,12 +169,21 @@ importers:
 
   functions:
     dependencies:
+      '@bspc/validation':
+        specifier: workspace:*
+        version: link:../packages/validation
+      '@bspc/web3':
+        specifier: workspace:*
+        version: link:../packages/web3
       firebase-admin:
         specifier: ^11.8.0
         version: 11.11.1(supports-color@7.2.0)
       firebase-functions:
         specifier: ^4.3.1
         version: 4.9.0(firebase-admin@11.11.1(supports-color@7.2.0))(supports-color@7.2.0)
+      viem:
+        specifier: ^2.19.4
+        version: 2.55.10(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.22.4
         version: 3.25.76
@@ -543,6 +558,12 @@ packages:
     resolution: {integrity: sha512-EO1NLCWSPMHdDSRGwZ73kxEEcTopAxX1naqLJFNApp4hO8WfKfmEpmjxmP5TrrnypjIf2tUkYaKsfbEA7+AMmA==}
     peerDependencies:
       '@firebase/app': 0.x
+
+  '@firebase/rules-unit-testing@3.0.4':
+    resolution: {integrity: sha512-FxDc5rnTtt266PTs3dOkf4ZDq+P223TrFWXka/yG6gSFy3Es/iKwWh3bX9pROobHgbbrAd7she9+687yOC2z+A==}
+    engines: {node: '>=10.10.0'}
+    peerDependencies:
+      firebase: ^10.0.0
 
   '@firebase/storage-compat@0.3.12':
     resolution: {integrity: sha512-hA4VWKyGU5bWOll+uwzzhEMMYGu9PlKQc1w4DWxB3aIErWYzonrZjF0icqNQZbwKNIdh8SHjZlFeB2w6OSsjfg==}
@@ -1243,6 +1264,9 @@ packages:
 
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
+
+  '@types/node-fetch@2.6.4':
+    resolution: {integrity: sha512-1ZX9fcN4Rvkvgv4E6PAY5WXUFWFcRWxZa3EW83UjycOB9ljJCedb2CupIP4RZMEwF/M3eTcCihbBRgwtGbg5Rg==}
 
   '@types/node@20.19.43':
     resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
@@ -2193,6 +2217,10 @@ packages:
     resolution: {integrity: sha512-Ogz/E85h9tlfJzpI6TuFpGcHZFhLrb9Gw8wq9v40CxSCPnv7ahKr6Xgtkn0KYCDQJ8DNn5VoMO8EXr9V5PadyA==}
     engines: {node: '>= 0.12'}
 
+  form-data@3.0.5:
+    resolution: {integrity: sha512-j23EibVLnp4zNXGW7LjryXYa2X6U/M96yoOX+ybZxwkYajdxRNEqYY3zhh7y0i6kfISKS2jr+EJq1YTUDEv5+w==}
+    engines: {node: '>= 6'}
+
   forwarded@0.2.0:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
@@ -3026,6 +3054,15 @@ packages:
   node-exports-info@1.6.2:
     resolution: {integrity: sha512-kXs9Go0cah0qHVV2v389IXQLdLCeE1xfFtjOAF+iobu0OIoG1pje8At2vMHyaPMiPMnG/LWP50twML21eMcAag==}
     engines: {node: '>= 0.4'}
+
+  node-fetch@2.6.7:
+    resolution: {integrity: sha512-ZjMPFEfVx5j+y2yF35Kzx5sF7kDzxuDj6ziH4FFbOp87zKDZNx8yExJIb05OGF4Nlt9IHFIMBkRl41VdvcNdbQ==}
+    engines: {node: 4.x || >=6.0.0}
+    peerDependencies:
+      encoding: ^0.1.0
+    peerDependenciesMeta:
+      encoding:
+        optional: true
 
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
@@ -4381,6 +4418,14 @@ snapshots:
       '@firebase/util': 1.10.0
       tslib: 2.8.1
 
+  '@firebase/rules-unit-testing@3.0.4(firebase@10.14.1)':
+    dependencies:
+      '@types/node-fetch': 2.6.4
+      firebase: 10.14.1
+      node-fetch: 2.6.7
+    transitivePeerDependencies:
+      - encoding
+
   '@firebase/storage-compat@0.3.12(@firebase/app-compat@0.2.43)(@firebase/app-types@0.9.2)(@firebase/app@0.10.13)':
     dependencies:
       '@firebase/app-compat': 0.2.43
@@ -5007,6 +5052,11 @@ snapshots:
 
   '@types/ms@2.1.0': {}
 
+  '@types/node-fetch@2.6.4':
+    dependencies:
+      '@types/node': 26.1.2
+      form-data: 3.0.5
+
   '@types/node@20.19.43':
     dependencies:
       undici-types: 6.21.0
@@ -5413,8 +5463,7 @@ snapshots:
       retry: 0.13.1
     optional: true
 
-  asynckit@0.4.0:
-    optional: true
+  asynckit@0.4.0: {}
 
   available-typed-arrays@1.0.7:
     dependencies:
@@ -5538,7 +5587,6 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
-    optional: true
 
   compressible@2.0.18:
     dependencies:
@@ -5624,8 +5672,7 @@ snapshots:
       has-property-descriptors: 1.0.2
       object-keys: 1.1.1
 
-  delayed-stream@1.0.0:
-    optional: true
+  delayed-stream@1.0.0: {}
 
   depd@2.0.0: {}
 
@@ -6264,6 +6311,14 @@ snapshots:
       mime-types: 2.1.35
       safe-buffer: 5.2.1
     optional: true
+
+  form-data@3.0.5:
+    dependencies:
+      asynckit: 0.4.0
+      combined-stream: 1.0.8
+      es-set-tostringtag: 2.1.0
+      hasown: 2.0.4
+      mime-types: 2.1.35
 
   forwarded@0.2.0: {}
 
@@ -7170,6 +7225,10 @@ snapshots:
       object.entries: 1.1.9
       semver: 6.3.1
 
+  node-fetch@2.6.7:
+    dependencies:
+      whatwg-url: 5.0.0
+
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
@@ -7865,8 +7924,7 @@ snapshots:
 
   toidentifier@1.0.1: {}
 
-  tr46@0.0.3:
-    optional: true
+  tr46@0.0.3: {}
 
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
@@ -8074,8 +8132,7 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  webidl-conversions@3.0.1:
-    optional: true
+  webidl-conversions@3.0.1: {}
 
   websocket-driver@0.7.5:
     dependencies:
@@ -8089,7 +8146,6 @@ snapshots:
     dependencies:
       tr46: 0.0.3
       webidl-conversions: 3.0.1
-    optional: true
 
   which-boxed-primitive@1.1.1:
     dependencies:

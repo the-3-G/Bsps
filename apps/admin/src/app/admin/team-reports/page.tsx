@@ -167,7 +167,17 @@ export default function TeamReportsPage() {
           <table className="w-full text-left border-collapse dense-table">
             <thead>
               <tr className="bg-gray-100/60 border-b border-gray-200 text-gray-500 font-semibold text-xs">
-                {visibleColumns.includes('leaderUsername') && <th>Leader</th>}
+                {visibleColumns.includes('leaderUsername') && (
+                  <th>
+                    <SortHeader
+                      label="Leader"
+                      sortKey="leaderUsername"
+                      currentSortKey={sortKey}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                  </th>
+                )}
                 <th>Leader Wallet</th>
                 {visibleColumns.includes('directUsersCount') && <th>Direct Users</th>}
                 {visibleColumns.includes('descendantsCount') && <th>Total Descendants</th>}

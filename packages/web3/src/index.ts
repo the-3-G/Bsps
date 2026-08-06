@@ -17,6 +17,38 @@ export function truncateAddress(address: string, startLength = 6, endLength = 4)
   }
 }
 
+export interface Eip4361Params {
+  domain: string;
+  address: string;
+  statement: string;
+  uri: string;
+  version?: string;
+  chainId: number;
+  nonce: string;
+  issuedAt: string;
+  expiresAt: string;
+  requestId: string;
+}
+
+export function buildEip4361Message(params: Eip4361Params): string {
+  const checksummedAddress = sanitizeAndChecksumAddress(params.address);
+  const version = params.version || '1';
+  return [
+    `${params.domain} wants you to sign in with your Ethereum account:`,
+    checksummedAddress,
+    '',
+    params.statement,
+    '',
+    `URI: ${params.uri}`,
+    `Version: ${version}`,
+    `Chain ID: ${params.chainId}`,
+    `Nonce: ${params.nonce}`,
+    `Issued At: ${params.issuedAt}`,
+    `Expiration Time: ${params.expiresAt}`,
+    `Request ID: ${params.requestId}`,
+  ].join('\n');
+}
+
 // Chain Configuration Layer loaded from Environment
 export interface ChainConfig {
   chainId: number;
@@ -34,14 +66,14 @@ export function loadChainConfig(): ChainConfig {
   if (isMock) {
     // Return deterministic mock settings for local development
     return {
-      chainId: 1,
-      name: 'Ethereum Mainnet (Mock)',
-      rpcUrl: 'https://cloudflare-eth.com',
-      explorerUrl: 'https://etherscan.io',
-      usdcAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      chainId: 11155111,
+      name: 'Sepolia Testnet (Mock)',
+      rpcUrl: 'https://rpc.sepolia.org',
+      explorerUrl: 'https://sepolia.etherscan.io',
+      usdcAddress: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
       decimals: 6,
       requiredConfirmations: 6,
-      startIndexBlock: 18000000,
+      startIndexBlock: 5000000,
     };
   }
 
@@ -50,8 +82,8 @@ export function loadChainConfig(): ChainConfig {
   const explorerUrl = process.env.NEXT_PUBLIC_EXPLORER_URL;
   const usdcAddress = process.env.NEXT_PUBLIC_USDC_ADDRESS;
   const decimalsStr = process.env.NEXT_PUBLIC_USDC_DECIMALS;
-  const requiredConfirmationsStr = process.env.NEXT_PUBLIC_REQUIRED_CONFIRMATIONS;
-  const startIndexBlockStr = process.env.NEXT_PUBLIC_START_INDEX_BLOCK;
+  const requiredConfirmationsStr = process.env.NEXT_PUBLIC_REQUIRED_CONFIRMATIONS || process.env.REQUIRED_CONFIRMATIONS;
+  const startIndexBlockStr = process.env.NEXT_PUBLIC_START_INDEX_BLOCK || process.env.INDEXER_START_BLOCK;
 
   // Fail safely and throw explicit configuration errors
   if (!chainIdStr || !rpcUrl || !explorerUrl || !usdcAddress || !decimalsStr) {
@@ -68,18 +100,12 @@ export function loadChainConfig(): ChainConfig {
     explorerUrl,
     usdcAddress: sanitizeAndChecksumAddress(usdcAddress),
     decimals: parseInt(decimalsStr, 10),
-    requiredConfirmations: requiredConfirmationsStr ? parseInt(requiredConfirmationsStr, 10) : 12,
-    startIndexBlock: startIndexBlockStr ? parseInt(startIndexBlockStr, 10) : 0,
+    requiredConfirmations: requiredConfirmationsStr ? parseInt(requiredConfirmationsStr, 10) : 6,
+    startIndexBlock: startIndexBlockStr ? parseInt(startIndexBlockStr, 10) : 5000000,
   };
 }
 
 export const SUPPORTED_CHAINS = {
-  mainnet: {
-    id: 1,
-    name: 'Ethereum Mainnet',
-    explorer: 'https://etherscan.io',
-    rpc: 'https://cloudflare-eth.com',
-  },
   sepolia: {
     id: 11155111,
     name: 'Sepolia Testnet',
@@ -90,12 +116,12 @@ export const SUPPORTED_CHAINS = {
 
 export function getExplorerTxLink(chainId: number, txHash: string): string {
   const chain = Object.values(SUPPORTED_CHAINS).find((c) => c.id === chainId);
-  const baseExplorer = chain ? chain.explorer : 'https://etherscan.io';
+  const baseExplorer = chain ? chain.explorer : 'https://sepolia.etherscan.io';
   return `${baseExplorer}/tx/${txHash}`;
 }
 
 export function getExplorerAddressLink(chainId: number, address: string): string {
   const chain = Object.values(SUPPORTED_CHAINS).find((c) => c.id === chainId);
-  const baseExplorer = chain ? chain.explorer : 'https://etherscan.io';
+  const baseExplorer = chain ? chain.explorer : 'https://sepolia.etherscan.io';
   return `${baseExplorer}/address/${address}`;
 }

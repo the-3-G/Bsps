@@ -4,14 +4,20 @@
   "private": true,
   "description": "Authorized Crypto Admin Dashboard & DApp Monorepo",
   "scripts": {
-    "dev": "pnpm --filter dapp dev",
-    "dev:admin": "pnpm --filter admin dev",
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
+    "dev": "npx pnpm --filter dapp dev",
+    "dev:admin": "npx pnpm --filter admin dev",
+    "build": "npx pnpm -r build",
+    "lint": "npx pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/web3.test.ts tests/role-auth.test.ts tests/wallet-auth.test.ts tests/firebase.test.ts tests/wallet-challenge.test.ts tests/admin-boundary.test.ts tests/chat-service.test.ts",
+    "test:rules": "firebase emulators:exec --only auth,firestore \"vitest run tests/firestore-rules.test.ts\"",
+    "test:functions": "firebase emulators:exec --only auth,firestore,functions \"vitest run tests/functions-integration.test.ts\"",
+    "test:integration": "firebase emulators:exec --only auth,firestore,functions \"vitest run tests/firestore-rules.test.ts tests/functions-integration.test.ts\"",
+    "test:emulators": "npx pnpm run test:integration"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.3",
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
@@ -21,6 +27,7 @@
     "eslint": "^9.8.0",
     "prettier": "^3.3.3",
     "typescript": "^5.5.4",
+    "viem": "^2.19.4",
     "vitest": "^4.1.10"
   }
 }

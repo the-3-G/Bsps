@@ -20,7 +20,7 @@ import {
 } from '../../../components/ui/DataTable';
 import { userRepository } from '../../../repositories';
 import { DbUser } from '@bspc/types';
-import { Eye, ShieldAlert, RotateCw, Key } from 'lucide-react';
+import { Eye, ShieldAlert, RotateCw } from 'lucide-react';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);

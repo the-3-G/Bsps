@@ -310,7 +310,7 @@ export const SortHeader: React.FC<SortHeaderProps> = ({
       className="inline-flex items-center gap-1 hover:text-teal-primary font-semibold uppercase tracking-wider text-left"
     >
       <span>{label}</span>
-      <ArrowUpDown className={`w-3 h-3 transition-opacity ${isSorted ? 'opacity-100 text-teal-primary' : 'opacity-35'}`} />
+      <ArrowUpDown className={`w-3 h-3 transition-transform ${isSorted ? (direction === 'desc' ? 'rotate-180 text-teal-primary' : 'text-teal-primary') : 'opacity-35'}`} />
     </button>
   );
 };

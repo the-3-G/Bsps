@@ -1,4 +1,4 @@
-import { UserRole, OnChainTxInfo } from '@bspc/types';
+import { UserRole } from '@bspc/types';
 
 export interface MockUser {
   id: string;

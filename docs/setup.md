@@ -1,63 +1,68 @@
 # Setup & Local Installation
 
-This document provides Windows-compatible setup instructions for starting services in both mock and Firebase modes.
-
-## Prerequisites
-- Node.js: `v18.0.0` or higher (verified with `v24.18.0`)
-- pnpm: `v11.20.0`
-- Firebase CLI: `npm install -g firebase-tools`
-
-## Installation
-Run from the root of the repository:
-```cmd
-npx pnpm install
-npx pnpm approve-builds protobufjs
-```
+This document provides setup instructions for installing dependencies, configuring environment variables, running test suites, and starting services for the BSPC monorepo.
 
 ---
 
 ## Environment Configuration
 
-Create `.env.local` inside `apps/admin/` and `apps/dapp/`.
+### 1. Client Environment Variables (`apps/admin/.env.local` & `apps/dapp/.env.local`)
 
-### Client Environment Variables
 ```env
+# Firebase Web Client Configuration (Project ID: bspc-be4f8)
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyA4j2To1oFlDmFiBiluPlkWSA_0DV2mWEo
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=bspc-be4f8.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=bspc-be4f8
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=bspc-be4f8.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=133746398244
+NEXT_PUBLIC_FIREBASE_APP_ID=1:133746398244:web:03c0b077d035a470b0f4b1
+
+# Mode Toggles
 NEXT_PUBLIC_USE_MOCK_DATA=true
-NEXT_PUBLIC_CHAIN_ID=1
-NEXT_PUBLIC_RPC_URL=https://cloudflare-eth.com
-NEXT_PUBLIC_EXPLORER_URL=https://etherscan.io
-NEXT_PUBLIC_USDC_ADDRESS=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false
+
+# Blockchain Network Configuration (Sepolia Testnet Safe Defaults)
+NEXT_PUBLIC_CHAIN_ID=11155111
+NEXT_PUBLIC_RPC_URL=https://rpc.sepolia.org
+NEXT_PUBLIC_EXPLORER_URL=https://sepolia.etherscan.io
+NEXT_PUBLIC_USDC_ADDRESS=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
 NEXT_PUBLIC_USDC_DECIMALS=6
 ```
+
+### 2. Server-Only Cloud Functions Environment Variables (`functions/.env`)
+
+```env
+REQUIRED_CONFIRMATIONS=6
+INDEXER_START_BLOCK=5000000
+SUPPORTED_CHAIN_IDS=11155111
+USDC_CONTRACT_ADDRESS=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+WALLET_AUTH_DOMAIN=bspc.io
+WALLET_AUTH_URI=https://bspc.io
+WALLET_CHALLENGE_TTL_SECONDS=300
+ENFORCE_APP_CHECK=false
+DEVELOPMENT_TESTNET_ONLY=true
+
+FIRESTORE_EMULATOR_HOST=localhost:8080
+FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+FUNCTIONS_EMULATOR_HOST=localhost:5001
+```
+
+---
+
+## Firebase Console & Authentication Configuration Rules
+
+1. **Firebase Authentication Initialization**: Firebase Authentication must be initialized for project `bspc-be4f8`.
+2. **Email/Password Provider**: Enable **Email/Password** in the Firebase Console ONLY for administrator authentication (`admin_<uid>`).
+3. **Custom Token Minting Mechanic**: Wallet authentication uses the server-side Firebase Admin SDK `createCustomToken()` function and client-side `signInWithCustomToken()`.
+4. **No Custom Token Provider Toggle**: Custom token authentication has **NO separate provider toggle** in the Firebase Sign-in method console page.
+5. **IAM Service Account Permissions**: The deployed Cloud Functions service account requires permission to sign blobs (`roles/iam.serviceAccountTokenCreator` or `Service Account Token Creator` role) when generating custom tokens in GCP production environments.
 
 ---
 
 ## Service Startup Instructions
 
-### 1. Mock Mode (Development Default)
-No running emulators are required.
-- **Admin Dashboard Port 3000**:
-  ```cmd
-  npx pnpm dev:admin
-  ```
-- **User DApp Port 3001**:
-  ```cmd
-  npx pnpm dev
-  ```
-
-### 2. Firebase Mode
-1. Set `NEXT_PUBLIC_USE_MOCK_DATA=false` inside your `.env.local` files.
-2. Select active firebase project:
-   ```cmd
-   firebase use bspc-mock
-   ```
-3. Start local Firebase Emulators suite:
-   ```cmd
-   firebase emulators:start --only auth,firestore,functions
-   ```
-4. Build administrative Cloud Functions:
-   ```cmd
-   cd functions
-   npx pnpm run build
-   ```
-5. Start dev portals in separate terminals.
+- **User DApp (Port 3001)**: `npx pnpm dev`
+- **Admin Dashboard (Port 3000)**: `npx pnpm dev:admin`
+- **Unit Tests**: `npx pnpm test:unit`
+- **Emulator Integration Tests**: `npx pnpm test:integration`
+- **Build All Packages**: `npx pnpm build`

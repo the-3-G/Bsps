@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PageHeader, WalletAddressCell, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
+import { PageHeader, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
   FilterBar,

@@ -2,27 +2,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Deny-all by default
+    // Default Deny-All Boundary
     match /{document=**} {
       allow read, write: if false;
     }
 
     // Helper functions
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
     function isOwner(uid) {
-      return isAuthenticated() && request.auth.uid == uid;
+      return isSignedIn() && request.auth.uid == uid;
     }
 
-    // Admin authorization based on custom claims
     function hasRole(role) {
-      return isAuthenticated() && request.auth.token.role == role;
+      return isSignedIn() && request.auth.token.role == role;
     }
 
-    function isAdmin() {
-      return isAuthenticated() && (
+    function hasAnyRole(roles) {
+      return isSignedIn() && request.auth.token.role in roles;
+    }
+
+    function isActiveAdmin() {
+      return isSignedIn() && (
         request.auth.token.role == 'super_admin' ||
         request.auth.token.role == 'operations_admin' ||
         request.auth.token.role == 'finance_reviewer' ||
@@ -34,48 +37,63 @@ service cloud.firestore {
 
     // 1. Users Collection
     match /users/{uid} {
-      allow get: if isOwner(uid) || isAdmin();
-      allow list: if isAdmin();
-      // Users cannot write privileged fields (status, role, balances, etc.)
-      allow update: if isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['role', 'status', 'balanceUsdt', 'balanceEth', 'onChainVerifiedUsdc', 'collectionStatus']);
-      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow get: if isOwner(uid) || isActiveAdmin();
+      allow list: if isActiveAdmin();
+      
+      // Users can only update non-sensitive profile fields.
+      // Modifying uid, walletAddress, role, status, balances, or timestamps is DENIED.
+      allow update: if isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'uid',
+        'walletAddress',
+        'walletAddressLowercase',
+        'role',
+        'status',
+        'authorizationStatus',
+        'collectionStatus',
+        'balanceUsdt',
+        'balanceEth',
+        'onChainVerifiedUsdc',
+        'createdAt',
+        'lastLoginAt',
+        'referredByUid'
+      ]);
+      allow create: if false; // User document creation is handled strictly by Cloud Functions
     }
 
-    // 2. Wallet Challenges
+    // 2. Wallet Challenges (Server-Only: Client Access Strictly Denied)
     match /walletChallenges/{challengeId} {
-      allow get, create: if true; // Publicly accessible to verify challenges
+      allow read, write: if false;
     }
 
     // 3. Admin Profiles
     match /adminProfiles/{uid} {
-      allow read: if isAdmin();
+      allow read: if isActiveAdmin();
       allow write: if hasRole('super_admin');
     }
 
-    // 4. Login Events
+    // 4. Login Events (Client writes DENIED; Server-only writes)
     match /loginEvents/{eventId} {
-      allow create: if isAuthenticated();
-      allow read: if isAdmin();
+      allow create: if false; // Server-only creation via Cloud Functions
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.walletAddress == request.auth.token.walletAddress);
     }
 
     // 5. Pledges
     match /pledges/{pledgeId} {
-      allow read: if isAuthenticated() && (resource.data.userUid == request.auth.uid || isAdmin());
-      // Write is server-only
+      allow read: if isSignedIn() && (resource.data.userUid == request.auth.uid || isActiveAdmin());
+      allow write: if false; // Server-only
     }
 
     // 6. Withdrawals
     match /withdrawalRequests/{requestId} {
-      allow read: if isAuthenticated() && (resource.data.userUid == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userUid == request.auth.uid;
-      // Approved/rejected write is restricted to server or specific admin claims in cloud functions
+      allow read: if isSignedIn() && (resource.data.userUid == request.auth.uid || isActiveAdmin());
+      allow create: if isSignedIn() && request.resource.data.userUid == request.auth.uid;
+      allow update, delete: if false; // Review mutations are server-only via Cloud Functions
     }
 
     // 7. Immutable Ledger Entries and Audit Logs
     match /ledgerEntries/{entryId} {
-      allow read: if isAuthenticated() && (resource.data.userUid == request.auth.uid || isAdmin());
-      allow write: if false; // Server-only (Firebase Admin SDK bypasses this rule)
+      allow read: if isSignedIn() && (resource.data.userUid == request.auth.uid || isActiveAdmin());
+      allow write: if false; // Server-only
     }
 
     match /adminAuditLogs/{logId} {
@@ -87,6 +105,27 @@ service cloud.firestore {
     match /systemConfig/public {
       allow read: if true;
       allow write: if hasRole('super_admin') || hasRole('operations_admin');
+    }
+
+    // 9. Customer Service Chat Conversations & Messages
+    match /chatConversations/{conversationId} {
+      allow get, list: if isActiveAdmin() || (isSignedIn() && (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid));
+      allow create: if isSignedIn() && request.resource.data.guestId == request.auth.uid;
+      allow update: if isActiveAdmin() || (isSignedIn() && (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid));
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read, list: if isActiveAdmin() || (isSignedIn() && (get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid || get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid));
+        allow create: if isActiveAdmin() || (isSignedIn() && request.resource.data.senderUid == request.auth.uid && request.resource.data.senderType in ['guest', 'user']);
+        allow update, delete: if false;
+      }
+    }
+
+    // 10. Voucher Requests
+    match /voucherRequests/{requestId} {
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.guestUid == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.guestUid == request.auth.uid;
+      allow update, delete: if false; // Server-only status review
     }
   }
 }
