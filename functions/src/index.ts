@@ -654,3 +654,23 @@ export const blockSupportUser = onCall(
   }
 );
 
+export const devSetAdminClaims = onCall(
+  { cors: true },
+  async (request) => {
+    const isEmulator = process.env.FUNCTIONS_EMULATOR_HOST || process.env.FIRESTORE_EMULATOR_HOST;
+    if (!isEmulator) {
+      throw new HttpsError('permission-denied', 'Only allowed in development/emulator mode.');
+    }
+    const { uid, role } = request.data || {};
+    if (!uid || !role) {
+      throw new HttpsError('invalid-argument', 'Missing uid or role.');
+    }
+    await admin.auth().setCustomUserClaims(uid, { role });
+    await db.collection('adminProfiles').doc(uid).set({
+      uid,
+      role,
+      updatedAt: admin.firestore.Timestamp.now(),
+    });
+    return { success: true };
+  }
+);

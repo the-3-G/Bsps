@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PageHeader, StatusBadge } from '../../../../components/ui/Reusables';
-import { Headset, Send, ArrowLeft, UserCheck, Lock } from 'lucide-react';
+import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { getFirebaseFirestore, getFirebaseFunctions, getFirebaseAuth } from '@bspc/firebase';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 interface ThreadMessage {
   id: string;
@@ -13,59 +17,250 @@ interface ThreadMessage {
   timestamp: string;
 }
 
-export default function CustomerServiceThreadPage() {
-  const [messages, setMessages] = useState<ThreadMessage[]>([
-    {
-      id: 'm1',
-      senderType: 'system',
-      senderName: 'System',
-      text: 'Conversation initiated via Receive Voucher prompt.',
-      timestamp: '10:15 AM',
-    },
-    {
-      id: 'm2',
-      senderType: 'guest',
-      senderName: 'Guest 4821',
-      text: 'Hello. I would like to inquire about the voucher eligibility for node staking.',
-      timestamp: '10:16 AM',
-    },
-    {
-      id: 'm3',
-      senderType: 'agent',
-      senderName: 'Support Agent Alpha',
-      text: 'Hello Guest 4821, thank you for reaching out. A support representative is reviewing your request.',
-      timestamp: '10:18 AM',
-    },
-  ]);
+interface ConvDetails {
+  conversationId: string;
+  guestLabel: string;
+  guestId: string;
+  source: string;
+  status: 'waiting' | 'assigned' | 'active' | 'closed' | 'blocked';
+  assignedAgentUid?: string;
+  subject?: string;
+  createdAtTime?: string;
+}
 
+export default function CustomerServiceThreadPage() {
+  const params = useParams();
+  const conversationId = params?.conversationId as string;
+
+  const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [convDetails, setConvDetails] = useState<ConvDetails | null>(null);
   const [replyText, setReplyText] = useState('');
   const [internalNote, setInternalNote] = useState('');
-  const [notesList, setNotesList] = useState<string[]>([
-    'Verified IP source Singapore. No abusive logs.',
-  ]);
+  const [notesList, setNotesList] = useState<string[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSendReply = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!replyText.trim()) return;
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingTimeRef = useRef<number>(0);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `m-${Date.now()}`,
-        senderType: 'agent',
-        senderName: 'Current Support Agent',
-        text: replyText.trim(),
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
-    setReplyText('');
+  useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock || !conversationId) {
+      setConvDetails({
+        conversationId: 'conv-8921',
+        guestLabel: 'Guest 4821',
+        guestId: 'guest-mock',
+        source: 'receive_voucher',
+        status: 'active',
+        assignedAgentUid: 'Support Agent Alpha',
+        subject: 'Voucher Request',
+        createdAtTime: 'Today 10:15 AM',
+      });
+      setMessages([
+        {
+          id: 'm1',
+          senderType: 'system',
+          senderName: 'System',
+          text: 'Conversation initiated via Receive Voucher prompt.',
+          timestamp: '10:15 AM',
+        },
+        {
+          id: 'm2',
+          senderType: 'guest',
+          senderName: 'Guest 4821',
+          text: 'Hello. I would like to inquire about the voucher eligibility for node staking.',
+          timestamp: '10:16 AM',
+        },
+      ]);
+      setNotesList(['Verified IP source Singapore. No abusive logs.']);
+      return;
+    }
+
+    try {
+      const db = getFirebaseFirestore();
+
+      // 1. Clear agent unread counter when viewing
+      const convDocRef = doc(db, 'chatConversations', conversationId);
+      updateDoc(convDocRef, { agentUnreadCount: 0 }).catch(() => {});
+
+      // 2. Listen to conversation metadata
+      const unsubConv = onSnapshot(convDocRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setConvDetails({
+            conversationId: snap.id,
+            guestLabel: data.guestLabel || `Guest ${data.guestId?.slice(-4) || ''}`,
+            guestId: data.guestId || '',
+            source: data.source || 'general_support',
+            status: data.status || 'waiting',
+            assignedAgentUid: data.assignedAgentUid || 'Unassigned',
+            subject: data.subject || 'Support Request',
+            createdAtTime: data.createdAt?.toDate
+              ? data.createdAt.toDate().toLocaleString()
+              : 'Recently',
+          });
+        }
+      });
+
+      // 3. Listen to messages (realtime onSnapshot)
+      const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
+      const qMsgs = query(msgsRef, orderBy('createdAt', 'asc'), limit(100));
+      const unsubMsgs = onSnapshot(qMsgs, (snapshot) => {
+        const list: ThreadMessage[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          list.push({
+            id: d.id,
+            senderType: data.senderType || 'guest',
+            senderName: data.senderType === 'agent' ? 'Agent Support' : data.senderType === 'system' ? 'System' : data.senderUid?.slice(-4).toUpperCase() ? `Guest ${data.senderUid?.slice(-4).toUpperCase()}` : 'Guest',
+            text: data.text || '',
+            timestamp: data.createdAt?.toDate
+              ? data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Just now',
+          });
+        });
+        setMessages(list);
+      });
+
+      // 4. Listen to internal notes
+      const notesRef = collection(db, 'chatConversations', conversationId, 'internalNotes');
+      const qNotes = query(notesRef, orderBy('createdAt', 'asc'));
+      const unsubNotes = onSnapshot(qNotes, (snapshot) => {
+        const list: string[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data().text || '');
+        });
+        setNotesList(list);
+      });
+
+      return () => {
+        unsubConv();
+        unsubMsgs();
+        unsubNotes();
+      };
+    } catch (e) {
+      console.error('Failed to setup thread subscription:', e);
+    }
+  }, [conversationId]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setReplyText(e.target.value);
+    if (!conversationId) return;
+
+    const now = Date.now();
+    if (now - lastTypingTimeRef.current > 3000) {
+      lastTypingTimeRef.current = now;
+      const db = getFirebaseFirestore();
+      const convDocRef = doc(db, 'chatConversations', conversationId);
+      updateDoc(convDocRef, { agentTyping: true }).catch(() => {});
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        updateDoc(convDocRef, { agentTyping: false }).catch(() => {});
+      }, 5000);
+    }
   };
 
-  const handleAddNote = (e: React.FormEvent) => {
+  const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!internalNote.trim()) return;
-    setNotesList((prev) => [...prev, internalNote.trim()]);
+    const cleanText = replyText.trim();
+    if (!cleanText) return;
+
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `m-${Date.now()}`,
+          senderType: 'agent',
+          senderName: 'Current Support Agent',
+          text: cleanText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+      setReplyText('');
+      return;
+    }
+
+    setReplyText('');
+    setErrorMessage(null);
+
+    // Cancel typing indicator
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    const db = getFirebaseFirestore();
+    const convDocRef = doc(db, 'chatConversations', conversationId);
+    updateDoc(convDocRef, { agentTyping: false }).catch(() => {});
+
+    try {
+      const functions = getFirebaseFunctions();
+      const sendMsgFn = httpsCallable<{ conversationId: string; text: string; messageType: string }, { messageId: string }>(
+        functions,
+        'sendAgentMessage'
+      );
+      await sendMsgFn({
+        conversationId,
+        text: cleanText,
+        messageType: 'text',
+      });
+    } catch (err: any) {
+      console.error('Failed to send agent reply:', err);
+      setErrorMessage(err.message || 'Failed to send reply.');
+    }
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanNote = internalNote.trim();
+    if (!cleanNote) return;
+
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setNotesList((prev) => [...prev, cleanNote]);
+      setInternalNote('');
+      return;
+    }
+
     setInternalNote('');
+    try {
+      const db = getFirebaseFirestore();
+      const notesRef = collection(db, 'chatConversations', conversationId, 'internalNotes');
+      await addDoc(notesRef, {
+        text: cleanNote,
+        createdAt: serverTimestamp(),
+      });
+    } catch (err: any) {
+      console.error('Failed to add internal note:', err);
+      setErrorMessage('Failed to add internal note.');
+    }
+  };
+
+  const handleCloseConversation = async () => {
+    if (!conversationId) return;
+    try {
+      const functions = getFirebaseFunctions();
+      const closeFn = httpsCallable<{ conversationId: string; resolutionNote?: string }, { success: boolean }>(
+        functions,
+        'closeSupportConversation'
+      );
+      await closeFn({ conversationId, resolutionNote: 'Support agent marked this thread resolved.' });
+    } catch (err: any) {
+      console.error('Failed to close conversation:', err);
+      setErrorMessage('Failed to close conversation.');
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!conversationId) return;
+    try {
+      const functions = getFirebaseFunctions();
+      const blockFn = httpsCallable<{ conversationId: string; reason?: string }, { success: boolean }>(
+        functions,
+        'blockSupportUser'
+      );
+      await blockFn({ conversationId, reason: 'Abusive support interaction.' });
+    } catch (err: any) {
+      console.error('Failed to block user:', err);
+      setErrorMessage('Failed to block user.');
+    }
   };
 
   return (
@@ -76,14 +271,20 @@ export default function CustomerServiceThreadPage() {
         </Link>
       </div>
 
+      {errorMessage && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl text-center">
+          {errorMessage}
+        </div>
+      )}
+
       <PageHeader
-        title="Support Conversation: conv-8921"
-        subtitle="Live agent thread communication with Guest 4821."
+        title={`Support Conversation: ${conversationId}`}
+        subtitle={`Live agent thread communication with ${convDetails?.guestLabel || 'Guest'}`}
         actions={
           <div className="flex items-center gap-2">
-            <StatusBadge status="active" />
+            {convDetails && <StatusBadge status={convDetails.status} />}
             <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-200">
-              Voucher Request
+              {convDetails?.subject || 'Voucher Request'}
             </span>
           </div>
         }
@@ -97,7 +298,7 @@ export default function CustomerServiceThreadPage() {
             <div className="flex items-center gap-2 font-bold text-gray-800">
               <Headset className="w-4 h-4 text-amber-600" /> Live Chat Thread
             </div>
-            <div className="text-[11px] text-gray-500 font-mono">Assigned: Support Agent Alpha</div>
+            <div className="text-[11px] text-gray-500 font-mono">Assigned: {convDetails?.assignedAgentUid || 'Unassigned'}</div>
           </div>
 
           {/* Thread Messages List */}
@@ -138,12 +339,13 @@ export default function CustomerServiceThreadPage() {
               type="text"
               placeholder="Type official support reply..."
               value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-teal-primary"
+              onChange={handleInputChange}
+              disabled={convDetails?.status === 'closed' || convDetails?.status === 'blocked'}
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-teal-primary disabled:opacity-40"
             />
             <button
               type="submit"
-              disabled={!replyText.trim()}
+              disabled={!replyText.trim() || convDetails?.status === 'closed' || convDetails?.status === 'blocked'}
               className="bg-teal-primary hover:bg-teal-hover disabled:opacity-40 text-white font-bold text-xs px-4 py-2 rounded inline-flex items-center gap-1.5 transition-colors"
             >
               <Send className="w-3.5 h-3.5" /> Send Reply
@@ -158,11 +360,27 @@ export default function CustomerServiceThreadPage() {
               <UserCheck className="w-4 h-4 text-teal-600" /> Guest Details
             </div>
             <div className="space-y-1.5 font-mono text-[11px] text-gray-600">
-              <div><span className="text-gray-400">Guest ID:</span> Guest 4821</div>
-              <div><span className="text-gray-400">Auth Mode:</span> Anonymous Auth</div>
-              <div><span className="text-gray-400">Source:</span> Receive Voucher</div>
-              <div><span className="text-gray-400">Created:</span> Today 10:15 AM</div>
+              <div><span className="text-gray-400">Guest ID:</span> {convDetails?.guestLabel || 'Guest'}</div>
+              <div><span className="text-gray-400">UID:</span> {convDetails?.guestId?.slice(0, 16)}...</div>
+              <div><span className="text-gray-400">Source:</span> {convDetails?.source}</div>
+              <div><span className="text-gray-400">Created:</span> {convDetails?.createdAtTime}</div>
             </div>
+            {convDetails?.status !== 'closed' && convDetails?.status !== 'blocked' && (
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  onClick={handleCloseConversation}
+                  className="w-full flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-bold py-1.5 rounded transition-colors"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Mark Resolved
+                </button>
+                <button
+                  onClick={handleBlockUser}
+                  className="w-full flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold py-1.5 rounded transition-colors"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> Block Support User
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded border border-gray-200 p-4 space-y-3 shadow-sm text-xs">
@@ -197,3 +415,4 @@ export default function CustomerServiceThreadPage() {
     </div>
   );
 }
+

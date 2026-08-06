@@ -11,9 +11,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "test": "vitest run",
     "test:unit": "vitest run tests/web3.test.ts tests/role-auth.test.ts tests/wallet-auth.test.ts tests/firebase.test.ts tests/wallet-challenge.test.ts tests/admin-boundary.test.ts tests/chat-service.test.ts",
-    "test:rules": "firebase emulators:exec --only auth,firestore \"vitest run tests/firestore-rules.test.ts\"",
-    "test:functions": "firebase emulators:exec --only auth,firestore,functions \"vitest run tests/functions-integration.test.ts\"",
-    "test:integration": "firebase emulators:exec --only auth,firestore,functions \"vitest run tests/firestore-rules.test.ts tests/functions-integration.test.ts\"",
+    "test:rules": "npx firebase emulators:exec --only auth,firestore \"vitest run tests/firestore-rules.test.ts\"",
+    "test:functions": "npx firebase emulators:exec --only auth,firestore,functions \"vitest run tests/functions-integration.test.ts\"",
+    "test:chat": "npx firebase emulators:exec --only auth,firestore,functions \"vitest run tests/chat-integration.test.ts\"",
+    "test:integration": "npx firebase emulators:exec --only auth,firestore,functions \"vitest run tests/firestore-rules.test.ts tests/functions-integration.test.ts tests/chat-integration.test.ts\"",
     "test:emulators": "npx pnpm run test:integration"
   },
   "devDependencies": {
@@ -25,6 +26,8 @@
     "@typescript-eslint/parser": "^8.0.1",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.8.0",
+    "firebase": "^12.17.1",
+    "firebase-tools": "^15.25.1",
     "prettier": "^3.3.3",
     "typescript": "^5.5.4",
     "viem": "^2.19.4",

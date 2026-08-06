@@ -111,13 +111,26 @@ service cloud.firestore {
     match /chatConversations/{conversationId} {
       allow get, list: if isActiveAdmin() || (isSignedIn() && (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid));
       allow create: if isSignedIn() && request.resource.data.guestId == request.auth.uid;
-      allow update: if isActiveAdmin() || (isSignedIn() && (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid));
+      allow update: if isActiveAdmin() || (
+        isSignedIn() && 
+        (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['assignedAgentUid', 'status'])
+      );
       allow delete: if false;
 
       match /messages/{messageId} {
         allow read, list: if isActiveAdmin() || (isSignedIn() && (get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid || get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid));
-        allow create: if isActiveAdmin() || (isSignedIn() && request.resource.data.senderUid == request.auth.uid && request.resource.data.senderType in ['guest', 'user']);
+        allow create: if isActiveAdmin() || (
+          isSignedIn() && 
+          request.resource.data.senderUid == request.auth.uid && 
+          request.resource.data.senderType in ['guest', 'user'] &&
+          get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.status in ['waiting', 'assigned', 'active']
+        );
         allow update, delete: if false;
+      }
+
+      match /internalNotes/{noteId} {
+        allow read, write: if isActiveAdmin();
       }
     }
 

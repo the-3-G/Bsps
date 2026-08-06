@@ -5,6 +5,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { UserRole } from '@bspc/types';
+import { getFirebaseAuth, getFirebaseFunctions } from '@bspc/firebase';
+import { signInAnonymously } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -13,16 +16,51 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('super_admin');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate auth check
-    setTimeout(async () => {
+    setErrorMessage(null);
+
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+
+    if (useMock) {
+      setTimeout(async () => {
+        await login(email, role);
+        setIsLoading(false);
+        router.push('/admin/console');
+      }, 1000);
+      return;
+    }
+
+    try {
+      const auth = getFirebaseAuth();
+      const functions = getFirebaseFunctions();
+      
+      // 1. Sign in anonymously to Auth emulator
+      const userCredential = await signInAnonymously(auth);
+      const uid = userCredential.user.uid;
+
+      // 2. Set Admin role and claim in emulator
+      const devSetAdminClaimsFn = httpsCallable<{ uid: string; role: string }, { success: boolean }>(
+        functions,
+        'devSetAdminClaims'
+      );
+      await devSetAdminClaimsFn({ uid, role });
+
+      // 3. Force token refresh to activate new claims
+      await userCredential.user.getIdToken(true);
+
+      // 4. Update frontend context state
       await login(email, role);
       setIsLoading(false);
       router.push('/admin/console');
-    }, 1000);
+    } catch (err: any) {
+      console.error('Admin emulator authentication failed:', err);
+      setErrorMessage(err.message || 'Emulator auth failed. Verify emulator services are running.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -35,6 +73,12 @@ export default function LoginPage() {
           <h1 className="text-lg font-bold text-gray-900">Admin Control Gate</h1>
           <p className="text-xs text-gray-500">BSPC Administrative Authentication Portal</p>
         </div>
+
+        {errorMessage && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl text-center">
+            {errorMessage}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

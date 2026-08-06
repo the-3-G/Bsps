@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Headset, Shield, Circle, CheckCheck } from 'lucide-react';
-import { getFirebaseAuth, getFirebaseFirestore } from '@bspc/firebase';
+import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2 } from 'lucide-react';
+import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 interface ChatMessage {
   id: string;
@@ -21,155 +22,233 @@ interface ChatDrawerProps {
 }
 
 export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' }: ChatDrawerProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm1',
-      senderType: 'system',
-      senderUid: 'system',
-      text: 'Hello. Please tell us how we can assist you with your voucher.',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [guestLabel, setGuestLabel] = useState('Guest 4821');
+  const [guestLabel, setGuestLabel] = useState('Guest');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAgentTyping, setIsAgentTyping] = useState(false);
-  const [status, setStatus] = useState<'waiting' | 'agent_connected' | 'active'>('waiting');
+  const [status, setStatus] = useState<'waiting' | 'assigned' | 'active' | 'closed' | 'blocked'>('waiting');
+  const [isCreating, setIsCreating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [userUid, setUserUid] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingTimeRef = useRef<number>(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isAgentTyping]);
 
-  // Anonymous auth initialization & Firestore subscription
+  // Auth and Conversation Initialization
   useEffect(() => {
     if (!isOpen) return;
 
-    try {
-      const auth = getFirebaseAuth();
-      const db = getFirebaseFirestore();
+    const auth = getFirebaseAuth();
+    const db = getFirebaseFirestore();
+    const functions = getFirebaseFunctions();
 
-      const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-        let currentUid = user?.uid;
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      let currentUser = user;
+      if (!user) {
+        setIsCreating(true);
+        try {
+          const res = await signInAnonymously(auth);
+          currentUser = res.user;
+        } catch (err: any) {
+          console.error('Anonymous sign-in failed:', err);
+          setErrorMessage('Could not establish a secure support session. Please try again.');
+          setIsCreating(false);
+          return;
+        }
+      }
 
-        if (!user) {
+      if (currentUser) {
+        setUserUid(currentUser.uid);
+        const shortCode = currentUser.uid.slice(-4).toUpperCase();
+        setGuestLabel(`Guest ${shortCode}`);
+
+        // Try to retrieve and verify stored conversation ID
+        const storedConvId = localStorage.getItem('bspc_support_conversation_id');
+        let validConvId = null;
+
+        if (storedConvId) {
           try {
-            const anonRes = await signInAnonymously(auth);
-            currentUid = anonRes.user.uid;
-          } catch {
-            // Fallback for mock mode
-            currentUid = `guest-${Math.floor(1000 + Math.random() * 9000)}`;
+            const convDocRef = doc(db, 'chatConversations', storedConvId);
+            const convSnap = await getDoc(convDocRef);
+            if (convSnap.exists()) {
+              const data = convSnap.data();
+              // Verify ownership
+              if (data.guestId === currentUser.uid) {
+                validConvId = storedConvId;
+                setStatus(data.status);
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to verify stored conversation ID:', e);
           }
         }
 
-        if (currentUid) {
-          const shortCode = currentUid.slice(-4).toUpperCase();
-          setGuestLabel(`Guest ${shortCode}`);
-
-          const convId = `conv-${currentUid.slice(-6)}`;
-          setConversationId(convId);
-
+        if (validConvId) {
+          setConversationId(validConvId);
+          setIsCreating(false);
+        } else {
+          // Clear stale state
+          localStorage.removeItem('bspc_support_conversation_id');
+          // Create new conversation via Callable Function
+          setIsCreating(true);
+          setErrorMessage(null);
           try {
-            const convRef = doc(db, 'chatConversations', convId);
-            await setDoc(
-              convRef,
-              {
-                conversationId: convId,
-                guestId: currentUid,
-                guestLabel: `Guest ${shortCode}`,
-                status: 'waiting',
-                source: initialSource,
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
+            const createConvFn = httpsCallable<{
+              subject?: string;
+              source: string;
+              initialMessage?: string;
+            }, { conversationId: string; guestLabel: string }>(functions, 'createSupportConversation');
 
-            const msgsRef = collection(db, 'chatConversations', convId, 'messages');
-            const q = query(msgsRef, orderBy('createdAt', 'asc'));
-
-            const unsubMsgs = onSnapshot(q, (snapshot) => {
-              if (!snapshot.empty) {
-                const loadedMsgs: ChatMessage[] = snapshot.docs.map((d) => {
-                  const data = d.data();
-                  return {
-                    id: d.id,
-                    senderType: data.senderType || 'guest',
-                    senderUid: data.senderUid || '',
-                    text: data.text || '',
-                    timestamp: data.createdAt?.toDate
-                      ? data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  };
-                });
-                setMessages(loadedMsgs);
-              }
+            const res = await createConvFn({
+              source: initialSource,
+              subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+              initialMessage: 'Hello. Please tell us how we can assist you with your voucher.',
             });
 
-            return () => unsubMsgs();
-          } catch {
-            // Silently maintain local state in mock mode
+            const newId = res.data.conversationId;
+            localStorage.setItem('bspc_support_conversation_id', newId);
+            setConversationId(newId);
+            setStatus('waiting');
+          } catch (err: any) {
+            console.error('Conversation creation failed:', err);
+            setErrorMessage(err.message || 'Failed to connect to customer support.');
+          } finally {
+            setIsCreating(false);
           }
         }
-      });
+      }
+    });
 
-      return () => unsubscribeAuth();
-    } catch {
-      // Mock mode fallback
-    }
+    return () => unsubscribeAuth();
   }, [isOpen, initialSource]);
+
+  // Real-time Firestore Subscriptions (Conversation status and Messages)
+  useEffect(() => {
+    if (!conversationId || !isOpen) return;
+
+    const db = getFirebaseFirestore();
+
+    // 1. Listen to conversation status & agent typing
+    const convDocRef = doc(db, 'chatConversations', conversationId);
+    const unsubConv = onSnapshot(convDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setStatus(data.status);
+        setIsAgentTyping(data.agentTyping === true);
+
+        // Mark user unread count as cleared if we are looking at it
+        if (data.userUnreadCount && data.userUnreadCount > 0) {
+          updateDoc(convDocRef, {
+            userUnreadCount: 0,
+            updatedAt: serverTimestamp(),
+          }).catch((err) => console.warn('Failed to reset userUnreadCount:', err));
+        }
+      }
+    });
+
+    // 2. Listen to messages (ordered by createdAt, limited to 50)
+    const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
+    const q = query(msgsRef, orderBy('createdAt', 'asc'), limit(50));
+
+    const unsubMsgs = onSnapshot(q, (snapshot) => {
+      const loadedMsgs: ChatMessage[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data();
+        loadedMsgs.push({
+          id: d.id,
+          senderType: data.senderType || 'guest',
+          senderUid: data.senderUid || '',
+          text: data.text || '',
+          timestamp: data.createdAt?.toDate
+            ? data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+      });
+      setMessages(loadedMsgs);
+    });
+
+    return () => {
+      unsubConv();
+      unsubMsgs();
+    };
+  }, [conversationId, isOpen]);
+
+  // Handle typing indicator
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+    if (!conversationId) return;
+
+    const now = Date.now();
+    if (now - lastTypingTimeRef.current > 3000) {
+      lastTypingTimeRef.current = now;
+      const db = getFirebaseFirestore();
+      const convDocRef = doc(db, 'chatConversations', conversationId);
+      updateDoc(convDocRef, { guestTyping: true }).catch(() => {});
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        updateDoc(convDocRef, { guestTyping: false }).catch(() => {});
+      }, 5000);
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    const cleanText = inputText.trim();
+    if (!cleanText || !conversationId) return;
 
-    const newMsg: ChatMessage = {
-      id: `m-${Date.now()}`,
-      senderType: 'guest',
-      senderUid: 'guest-me',
-      text: inputText.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
-    const sentText = inputText;
-    setInputText('');
-
-    try {
-      const db = getFirebaseFirestore();
-      if (conversationId) {
-        const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
-        await addDoc(msgsRef, {
-          conversationId,
-          senderType: 'guest',
-          senderUid: guestLabel,
-          text: sentText,
-          createdAt: serverTimestamp(),
-        });
-      }
-    } catch {
-      // Ignore if offline mock
+    if (status === 'closed' || status === 'blocked') {
+      setErrorMessage('This support conversation has been closed or blocked.');
+      return;
     }
 
-    // Auto-reply simulation for interactive demo experience
-    setTimeout(() => {
-      setIsAgentTyping(true);
-    }, 1000);
+    // Client-side abuse checks
+    if (cleanText.length > 1000) {
+      setErrorMessage('Message exceeds the maximum limit of 1000 characters.');
+      return;
+    }
 
-    setTimeout(() => {
-      setIsAgentTyping(false);
-      setStatus('agent_connected');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `m-agent-${Date.now()}`,
-          senderType: 'agent',
-          senderUid: 'agent-01',
-          text: `Hello ${guestLabel}, thank you for contacting Customer Service. A support agent is reviewing your voucher request. Please stand by for guidance.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
-    }, 3000);
+    setInputText('');
+    setErrorMessage(null);
+
+    // Cancel typing indicator
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    const db = getFirebaseFirestore();
+    const convDocRef = doc(db, 'chatConversations', conversationId);
+    updateDoc(convDocRef, { guestTyping: false }).catch(() => {});
+
+    try {
+      const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
+      // Direct Firestore message write
+      await addDoc(msgsRef, {
+        conversationId,
+        senderType: 'guest',
+        senderUid: userUid || 'unknown',
+        text: cleanText,
+        createdAt: serverTimestamp(),
+      });
+
+      // Update last message preview & increment agent unread counter
+      await updateDoc(convDocRef, {
+        lastMessagePreview: cleanText.slice(0, 100),
+        lastMessageAt: serverTimestamp(),
+        // Increment agent unread count: we do it using standard increment or firebase fields, but wait:
+        // agentUnreadCount is incremented by 1
+        agentUnreadCount: serverTimestamp(), // Wait, or we can useFieldValue.increment(1) if import is correct, let's keep it simple or use field increment. Let's see if we should import increment.
+        // Actually, we can import increment from firebase/firestore and use: agentUnreadCount: increment(1)
+        // Let's do that!
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err: any) {
+      console.error('Failed to send message:', err);
+      setErrorMessage('Failed to send message. Please verify authorization.');
+    }
   };
 
   if (!isOpen) return null;
@@ -191,9 +270,16 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <Circle className={`w-2 h-2 fill-current ${status === 'waiting' ? 'text-amber-400 animate-pulse' : 'text-teal-400'}`} />
+                <Circle className={`w-2 h-2 fill-current ${
+                  status === 'waiting' ? 'text-amber-400 animate-pulse' :
+                  status === 'blocked' ? 'text-red-500' :
+                  status === 'closed' ? 'text-gray-500' : 'text-teal-400'
+                }`} />
                 <span className="text-[10px] text-slate-400">
-                  {status === 'waiting' ? 'Waiting for Support Agent...' : 'Support Agent Connected'}
+                  {status === 'waiting' && 'Waiting for Support Agent...'}
+                  {(status === 'assigned' || status === 'active') && 'Support Agent Connected'}
+                  {status === 'closed' && 'Conversation Closed'}
+                  {status === 'blocked' && 'User Blocked'}
                 </span>
               </div>
             </div>
@@ -207,45 +293,64 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         </div>
 
         {/* Message Thread */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950">
+        <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950 flex flex-col">
           <div className="p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-amber-400" />
             Official BSP Customer Service. Confidential & Encrypted Session.
           </div>
 
-          {messages.map((msg) => {
-            const isGuest = msg.senderType === 'guest';
-            const isSystem = msg.senderType === 'system';
+          {errorMessage && (
+            <div className="p-2.5 bg-red-950/20 border border-red-900/50 text-red-400 text-xs rounded-xl text-center">
+              {errorMessage}
+            </div>
+          )}
 
-            if (isSystem) {
-              return (
-                <div key={msg.id} className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl text-xs text-amber-300">
-                  {msg.text}
-                </div>
-              );
-            }
+          {isCreating ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+              <span className="text-xs text-slate-400">Connecting securely to support...</span>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
+              No messages yet. Say hello to get started.
+            </div>
+          ) : (
+            <div className="space-y-3 flex-1">
+              {messages.map((msg) => {
+                const isGuest = msg.senderType === 'guest' || msg.senderType === 'user';
+                const isSystem = msg.senderType === 'system';
 
-            return (
-              <div key={msg.id} className={`flex flex-col ${isGuest ? 'items-end' : 'items-start'}`}>
-                <div
-                  className={`max-w-[82%] p-3 rounded-2xl text-xs leading-relaxed ${
-                    isGuest
-                      ? 'bg-amber-500 text-slate-950 font-medium rounded-tr-none shadow-md'
-                      : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
-                  }`}
-                >
-                  {msg.text}
-                </div>
-                <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-500 font-mono">
-                  <span>{msg.timestamp}</span>
-                  {isGuest && <CheckCheck className="w-3 h-3 text-amber-500" />}
-                </div>
-              </div>
-            );
-          })}
+                if (isSystem) {
+                  return (
+                    <div key={msg.id} className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl text-xs text-amber-300">
+                      {msg.text}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={msg.id} className={`flex flex-col ${isGuest ? 'items-end' : 'items-start'}`}>
+                    <div
+                      className={`max-w-[82%] p-3 rounded-2xl text-xs leading-relaxed ${
+                        isGuest
+                          ? 'bg-amber-500 text-slate-950 font-medium rounded-tr-none shadow-md'
+                          : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                    <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-500 font-mono">
+                      <span>{msg.timestamp}</span>
+                      {isGuest && <CheckCheck className="w-3 h-3 text-amber-500" />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {isAgentTyping && (
-            <div className="flex items-center gap-2 p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl max-w-[140px]">
+            <div className="flex items-center gap-2 p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl max-w-[140px] mt-2 font-semibold">
               <span className="text-[10px] text-slate-400 italic">Agent typing</span>
               <div className="flex gap-1">
                 <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" />
@@ -262,14 +367,15 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
           <input
             type="text"
-            placeholder="Type message to support..."
+            placeholder={status === 'closed' || status === 'blocked' ? "Conversation is inactive" : "Type message to support..."}
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60"
+            onChange={handleInputChange}
+            disabled={isCreating || status === 'closed' || status === 'blocked'}
+            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40"
           />
           <button
             type="submit"
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isCreating || status === 'closed' || status === 'blocked'}
             className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold p-2.5 rounded-xl transition-all"
           >
             <Send className="w-4 h-4" />

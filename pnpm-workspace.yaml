@@ -4,4 +4,6 @@ packages:
   - 'functions'
 allowBuilds:
   protobufjs: true
+  re2: true
   unrs-resolver: true
+  '@firebase/util': true

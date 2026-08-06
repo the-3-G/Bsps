@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, StatusBadge } from '../../../components/ui/Reusables';
 import { FilterBar, FilterField, TablePagination, ExportButton } from '../../../components/ui/DataTable';
 import { MessageSquare, Headset, UserCheck, ShieldAlert, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 interface MockConversation {
   conversationId: string;
@@ -61,9 +64,47 @@ const mockConversationsData: MockConversation[] = [
 ];
 
 export default function CustomerServiceAdminPage() {
-  const [conversations, setConversations] = useState<MockConversation[]>(mockConversationsData);
+  const [conversations, setConversations] = useState<MockConversation[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setConversations(mockConversationsData);
+      return;
+    }
+
+    try {
+      const db = getFirebaseFirestore();
+      const colRef = collection(db, 'chatConversations');
+      const q = query(colRef, orderBy('updatedAt', 'desc'), limit(100));
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const list: MockConversation[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          list.push({
+            conversationId: d.id,
+            guestLabel: data.guestLabel || `Guest ${data.guestId?.slice(-4) || ''}`,
+            source: data.source || 'general_support',
+            status: data.status || 'waiting',
+            assignedAgent: data.assignedAgentUid || 'Unassigned',
+            lastMessage: data.lastMessagePreview || '',
+            lastMessageTime: data.lastMessageAt?.toDate
+              ? data.lastMessageAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Just now',
+            userUnread: data.agentUnreadCount ? 1 : 0,
+          });
+        });
+        setConversations(list);
+      });
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.error('Failed to setup firestore listener:', e);
+    }
+  }, []);
 
   const filtered = conversations.filter((c) => {
     const matchesSearch = searchFilter
@@ -74,18 +115,48 @@ export default function CustomerServiceAdminPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleAssignToMe = (id: string) => {
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.conversationId === id ? { ...c, status: 'assigned', assignedAgent: 'Current Support Agent' } : c
-      )
-    );
+  const handleAssignToMe = async (id: string) => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.conversationId === id ? { ...c, status: 'assigned', assignedAgent: 'Current Support Agent' } : c
+        )
+      );
+      return;
+    }
+
+    try {
+      const functions = getFirebaseFunctions();
+      const assignFn = httpsCallable<{ conversationId: string }, { success: boolean }>(
+        functions,
+        'assignSupportAgent'
+      );
+      await assignFn({ conversationId: id });
+    } catch (err) {
+      console.error('Failed to assign conversation:', err);
+    }
   };
 
-  const handleClose = (id: string) => {
-    setConversations((prev) =>
-      prev.map((c) => (c.conversationId === id ? { ...c, status: 'closed' } : c))
-    );
+  const handleClose = async (id: string) => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setConversations((prev) =>
+        prev.map((c) => (c.conversationId === id ? { ...c, status: 'closed' } : c))
+      );
+      return;
+    }
+
+    try {
+      const functions = getFirebaseFunctions();
+      const closeFn = httpsCallable<{ conversationId: string; resolutionNote?: string }, { success: boolean }>(
+        functions,
+        'closeSupportConversation'
+      );
+      await closeFn({ conversationId: id, resolutionNote: 'Closed from admin queue.' });
+    } catch (err) {
+      console.error('Failed to close conversation:', err);
+    }
   };
 
   return (
