@@ -87,56 +87,73 @@ export function getFirebaseApp(): FirebaseApp {
   return cachedApp;
 }
 
-/**
- * Connects Firebase Client SDKs to local emulator suite if configured.
- * Safely executes ONLY in browser context and ONLY ONCE per browser session.
- */
-function setupEmulators(auth: Auth, db: Firestore, functions: Functions) {
-  if (typeof window === 'undefined') return;
-  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== 'true') return;
-  if (window.__FIREBASE_EMULATORS_CONNECTED__) return;
-
-  window.__FIREBASE_EMULATORS_CONNECTED__ = true;
-
-  try {
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-  } catch (err) {
-    console.warn('[Firebase] Emulator connection warning:', err);
+declare global {
+  interface Window {
+    __FIREBASE_AUTH_EMULATOR_CONNECTED__?: boolean;
+    __FIREBASE_FIRESTORE_EMULATOR_CONNECTED__?: boolean;
+    __FIREBASE_FUNCTIONS_EMULATOR_CONNECTED__?: boolean;
   }
 }
 
 /**
- * Returns singleton Auth instance with optional emulator connection.
+ * Returns singleton Auth instance with immediate emulator connection.
  */
 export function getFirebaseAuth(): Auth {
   if (!cachedAuth) {
     const app = getFirebaseApp();
     cachedAuth = getAuth(app);
-    setupEmulators(cachedAuth, getFirebaseFirestore(), getFirebaseFunctions());
+    if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
+      if (!window.__FIREBASE_AUTH_EMULATOR_CONNECTED__) {
+        window.__FIREBASE_AUTH_EMULATOR_CONNECTED__ = true;
+        try {
+          connectAuthEmulator(cachedAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+        } catch (err) {
+          console.warn('[Firebase] Auth emulator connection warning:', err);
+        }
+      }
+    }
   }
   return cachedAuth;
 }
 
 /**
- * Returns singleton Firestore instance with optional emulator connection.
+ * Returns singleton Firestore instance with immediate emulator connection.
  */
 export function getFirebaseFirestore(): Firestore {
   if (!cachedFirestore) {
     const app = getFirebaseApp();
     cachedFirestore = getFirestore(app);
+    if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
+      if (!window.__FIREBASE_FIRESTORE_EMULATOR_CONNECTED__) {
+        window.__FIREBASE_FIRESTORE_EMULATOR_CONNECTED__ = true;
+        try {
+          connectFirestoreEmulator(cachedFirestore, '127.0.0.1', 8080);
+        } catch (err) {
+          console.warn('[Firebase] Firestore emulator connection warning:', err);
+        }
+      }
+    }
   }
   return cachedFirestore;
 }
 
 /**
- * Returns singleton Functions instance with optional emulator connection.
+ * Returns singleton Functions instance with immediate emulator connection.
  */
 export function getFirebaseFunctions(): Functions {
   if (!cachedFunctions) {
     const app = getFirebaseApp();
     cachedFunctions = getFunctions(app);
+    if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
+      if (!window.__FIREBASE_FUNCTIONS_EMULATOR_CONNECTED__) {
+        window.__FIREBASE_FUNCTIONS_EMULATOR_CONNECTED__ = true;
+        try {
+          connectFunctionsEmulator(cachedFunctions, '127.0.0.1', 5001);
+        } catch (err) {
+          console.warn('[Firebase] Functions emulator connection warning:', err);
+        }
+      }
+    }
   }
   return cachedFunctions;
 }

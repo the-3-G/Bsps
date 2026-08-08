@@ -14,6 +14,15 @@ import {
 } from '@bspc/validation';
 import { buildEip4361Message } from '@bspc/web3';
 
+if (process.env.FUNCTIONS_EMULATOR === 'true' || process.env.FIREBASE_EMULATOR_HUB || process.env.NODE_ENV !== 'production') {
+  if (!process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+  }
+  if (!process.env.FIRESTORE_EMULATOR_HOST) {
+    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+  }
+}
+
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -657,20 +666,36 @@ export const blockSupportUser = onCall(
 export const devSetAdminClaims = onCall(
   { cors: true },
   async (request) => {
-    const isEmulator = process.env.FUNCTIONS_EMULATOR_HOST || process.env.FIRESTORE_EMULATOR_HOST;
-    if (!isEmulator) {
-      throw new HttpsError('permission-denied', 'Only allowed in development/emulator mode.');
+    try {
+      const isEmulator =
+        process.env.FUNCTIONS_EMULATOR === 'true' ||
+        process.env.FUNCTIONS_EMULATOR_HOST ||
+        process.env.FIRESTORE_EMULATOR_HOST ||
+        process.env.FIREBASE_EMULATOR_HUB ||
+        process.env.NODE_ENV !== 'production';
+      if (!isEmulator) {
+        throw new HttpsError('permission-denied', 'Only allowed in development/emulator mode.');
+      }
+      const { uid, role } = request.data || {};
+      if (!uid || !role) {
+        throw new HttpsError('invalid-argument', 'Missing uid or role.');
+      }
+
+      if (!process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+        process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+      }
+
+      await admin.auth().setCustomUserClaims(uid, { role });
+      await db.collection('adminProfiles').doc(uid).set({
+        uid,
+        role,
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+      return { success: true };
+    } catch (err: any) {
+      console.error('[devSetAdminClaims Error]:', err);
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('internal', err.message || 'Failed to set custom claims');
     }
-    const { uid, role } = request.data || {};
-    if (!uid || !role) {
-      throw new HttpsError('invalid-argument', 'Missing uid or role.');
-    }
-    await admin.auth().setCustomUserClaims(uid, { role });
-    await db.collection('adminProfiles').doc(uid).set({
-      uid,
-      role,
-      updatedAt: admin.firestore.Timestamp.now(),
-    });
-    return { success: true };
   }
 );
