@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "bspc-be4f8"
+  },
+  "targets": {
+    "bspc-be4f8": {
+      "hosting": {
+        "dapp-staging": [
+          "bspc-dapp-staging"
+        ],
+        "admin-staging": [
+          "bspc-admin-staging"
+        ]
+      }
+    }
+  }
+}

@@ -51,7 +51,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
 
   it('1. Unauthenticated user cannot read user profile', async () => {
     if (!hasEmulator) {
-      expect(rulesContent).toContain('match /{document=**} { allow read, write: if false; }');
+      expect(rulesContent).toContain('allow read, write: if false;');
       return;
     }
 

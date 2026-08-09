@@ -669,12 +669,11 @@ export const devSetAdminClaims = onCall(
     try {
       const isEmulator =
         process.env.FUNCTIONS_EMULATOR === 'true' ||
-        process.env.FUNCTIONS_EMULATOR_HOST ||
-        process.env.FIRESTORE_EMULATOR_HOST ||
-        process.env.FIREBASE_EMULATOR_HUB ||
-        process.env.NODE_ENV !== 'production';
+        Boolean(process.env.FUNCTIONS_EMULATOR_HOST) ||
+        Boolean(process.env.FIRESTORE_EMULATOR_HOST) ||
+        Boolean(process.env.FIREBASE_EMULATOR_HUB);
       if (!isEmulator) {
-        throw new HttpsError('permission-denied', 'Only allowed in development/emulator mode.');
+        throw new HttpsError('permission-denied', 'devSetAdminClaims is strictly disabled outside local emulator environment.');
       }
       const { uid, role } = request.data || {};
       if (!uid || !role) {

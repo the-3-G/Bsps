@@ -2,11 +2,13 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, Auth } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, Firestore, FirestoreDataConverter, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator, Functions } from 'firebase/functions';
+import { initializeAppCheck, ReCaptchaV3Provider, AppCheck } from 'firebase/app-check';
 
-// Declare window augmentation for emulator connection guard
+// Declare window augmentation for emulator connection guard & App Check debug token
 declare global {
   interface Window {
     __FIREBASE_EMULATORS_CONNECTED__?: boolean;
+    FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean | string;
   }
 }
 
@@ -169,6 +171,38 @@ export const firebaseConfigSchema = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+/**
+ * App Check initialization helper for staging and production.
+ */
+let cachedAppCheck: AppCheck | null = null;
+
+export function initAppCheck(): AppCheck | null {
+  if (typeof window === 'undefined') return null;
+  if (cachedAppCheck) return cachedAppCheck;
+
+  const siteKey = process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY;
+  if (!siteKey) {
+    return null;
+  }
+
+  try {
+    const app = getFirebaseApp();
+    const isDebug = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true' || process.env.NODE_ENV !== 'production';
+    if (isDebug && typeof window !== 'undefined') {
+      window.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
+    cachedAppCheck = initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    return cachedAppCheck;
+  } catch (err) {
+    console.warn('[Firebase] App Check initialization warning:', err);
+    return null;
+  }
+}
 
 /**
  * Shared Firestore data converter helper.

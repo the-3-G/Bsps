@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Hide Next.js dev toast / dev tools indicator ('N' circle) */
+nextjs-portal,
+[data-nextjs-toast],
+[data-next-badge],
+[data-next-mark],
+#nextjs-toast-errors-parent,
+div[data-nextjs-dev-tools] {
+  display: none !important;
+}
+
 :root {
   --background: #f5f6f8;
   --foreground: #1e293b;
