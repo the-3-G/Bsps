@@ -5,8 +5,8 @@ import { PageHeader, StatusBadge } from '../../../components/ui/Reusables';
 import { FilterBar, FilterField, TablePagination, ExportButton } from '../../../components/ui/DataTable';
 import { MessageSquare, Headset, UserCheck, ShieldAlert, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { getFirebaseFirestore, getFirebaseFunctions, getFirebaseAuth } from '@bspc/firebase';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 interface MockConversation {
@@ -126,6 +126,24 @@ export default function CustomerServiceAdminPage() {
       return;
     }
 
+    const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+    const db = getFirebaseFirestore();
+    const auth = getFirebaseAuth();
+    const agentUid = auth.currentUser?.uid || 'support-agent';
+
+    if (isSparkUat) {
+      try {
+        await updateDoc(doc(db, 'chatConversations', id), {
+          assignedAgentUid: agentUid,
+          status: 'assigned',
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        console.error('Direct Firestore assign failed:', err);
+      }
+      return;
+    }
+
     try {
       const functions = getFirebaseFunctions();
       const assignFn = httpsCallable<{ conversationId: string }, { success: boolean }>(
@@ -134,7 +152,16 @@ export default function CustomerServiceAdminPage() {
       );
       await assignFn({ conversationId: id });
     } catch (err) {
-      console.error('Failed to assign conversation:', err);
+      console.warn('Cloud Function assign unavailable. Falling back to direct Firestore:', err);
+      try {
+        await updateDoc(doc(db, 'chatConversations', id), {
+          assignedAgentUid: agentUid,
+          status: 'assigned',
+          updatedAt: serverTimestamp(),
+        });
+      } catch (fsErr) {
+        console.error('Firestore fallback assign failed:', fsErr);
+      }
     }
   };
 
@@ -147,6 +174,21 @@ export default function CustomerServiceAdminPage() {
       return;
     }
 
+    const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+    const db = getFirebaseFirestore();
+
+    if (isSparkUat) {
+      try {
+        await updateDoc(doc(db, 'chatConversations', id), {
+          status: 'closed',
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        console.error('Direct Firestore close failed:', err);
+      }
+      return;
+    }
+
     try {
       const functions = getFirebaseFunctions();
       const closeFn = httpsCallable<{ conversationId: string; resolutionNote?: string }, { success: boolean }>(
@@ -155,7 +197,15 @@ export default function CustomerServiceAdminPage() {
       );
       await closeFn({ conversationId: id, resolutionNote: 'Closed from admin queue.' });
     } catch (err) {
-      console.error('Failed to close conversation:', err);
+      console.warn('Cloud Function close unavailable. Falling back to direct Firestore:', err);
+      try {
+        await updateDoc(doc(db, 'chatConversations', id), {
+          status: 'closed',
+          updatedAt: serverTimestamp(),
+        });
+      } catch (fsErr) {
+        console.error('Firestore fallback close failed:', fsErr);
+      }
     }
   };
 

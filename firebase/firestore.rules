@@ -20,8 +20,12 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.role == role;
     }
 
-    function hasAnyRole(roles) {
-      return isSignedIn() && request.auth.token.role in roles;
+    function hasSupportRole() {
+      return isSignedIn() && (
+        request.auth.token.role == 'super_admin' ||
+        request.auth.token.role == 'operations_admin' ||
+        request.auth.token.role == 'support'
+      );
     }
 
     function isActiveAdmin() {
@@ -41,7 +45,6 @@ service cloud.firestore {
       allow list: if isActiveAdmin();
       
       // Users can only update non-sensitive profile fields.
-      // Modifying uid, walletAddress, role, status, balances, or timestamps is DENIED.
       allow update: if isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'uid',
         'walletAddress',
@@ -57,7 +60,7 @@ service cloud.firestore {
         'lastLoginAt',
         'referredByUid'
       ]);
-      allow create: if false; // User document creation is handled strictly by Cloud Functions
+      allow create: if false; // User document creation is handled strictly by backend
     }
 
     // 2. Wallet Challenges (Server-Only: Client Access Strictly Denied)
@@ -73,7 +76,7 @@ service cloud.firestore {
 
     // 4. Login Events (Client writes DENIED; Server-only writes)
     match /loginEvents/{eventId} {
-      allow create: if false; // Server-only creation via Cloud Functions
+      allow create: if false; // Server-only creation
       allow read: if isActiveAdmin() || (isSignedIn() && resource.data.walletAddress == request.auth.token.walletAddress);
     }
 
@@ -87,7 +90,7 @@ service cloud.firestore {
     match /withdrawalRequests/{requestId} {
       allow read: if isSignedIn() && (resource.data.userUid == request.auth.uid || isActiveAdmin());
       allow create: if isSignedIn() && request.resource.data.userUid == request.auth.uid;
-      allow update, delete: if false; // Review mutations are server-only via Cloud Functions
+      allow update, delete: if false; // Review mutations are server-only
     }
 
     // 7. Immutable Ledger Entries and Audit Logs
@@ -107,37 +110,76 @@ service cloud.firestore {
       allow write: if hasRole('super_admin') || hasRole('operations_admin');
     }
 
-    // 9. Customer Service Chat Conversations & Messages
+    // 9. Customer Service Chat Conversations & Messages (Spark UAT Enabled)
     match /chatConversations/{conversationId} {
       allow get, list: if isActiveAdmin() || (isSignedIn() && (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid));
-      allow create: if isSignedIn() && request.resource.data.guestId == request.auth.uid;
-      allow update: if isActiveAdmin() || (
+      
+      // Guest chat creation validation (Spark UAT Mode)
+      allow create: if isSignedIn() &&
+        request.resource.data.guestId == request.auth.uid &&
+        request.resource.data.authenticatedUid == request.auth.uid &&
+        request.resource.data.status == 'waiting' &&
+        request.resource.data.assignedAgentUid == null &&
+        request.resource.data.source in ['receive_voucher', 'general_support', 'floating_chat', 'side_menu'] &&
+        request.resource.data.keys().hasOnly(['guestId', 'authenticatedUid', 'guestLabel', 'status', 'assignedAgentUid', 'source', 'subject', 'createdAt', 'updatedAt', 'lastMessageAt', 'userUnreadCount', 'agentUnreadCount', 'agentTyping', 'userTyping', 'lastMessagePreview']);
+
+      // Conversation updates: Support Admin or Guest unread reset
+      allow update: if hasSupportRole() || (
         isSignedIn() && 
         (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['assignedAgentUid', 'status'])
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['guestId', 'authenticatedUid', 'assignedAgentUid', 'status', 'source', 'createdAt'])
       );
+
       allow delete: if false;
 
+      // Messages collection
       match /messages/{messageId} {
-        allow read, list: if isActiveAdmin() || (isSignedIn() && (get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid || get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid));
-        allow create: if isActiveAdmin() || (
-          isSignedIn() && 
-          request.resource.data.senderUid == request.auth.uid && 
-          request.resource.data.senderType in ['guest', 'user'] &&
-          get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.status in ['waiting', 'assigned', 'active']
+        allow read, list: if isActiveAdmin() || (
+          isSignedIn() && (
+            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid ||
+            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid
+          )
         );
+
+        allow create: if (
+          // Anonymous Guest message write validation
+          isSignedIn() && 
+          (
+            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid ||
+            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid
+          ) &&
+          request.resource.data.senderUid == request.auth.uid && 
+          request.resource.data.senderType == 'guest' &&
+          request.resource.data.messageType == 'text' &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 2000 &&
+          get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.status in ['waiting', 'assigned', 'active']
+        ) || (
+          // Support Admin message write validation
+          hasSupportRole() &&
+          request.resource.data.senderType == 'agent' &&
+          request.resource.data.messageType == 'text' &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 2000
+        );
+
         allow update, delete: if false;
       }
 
       match /internalNotes/{noteId} {
-        allow read, write: if isActiveAdmin();
+        allow read, write: if hasSupportRole();
       }
     }
 
     // 10. Voucher Requests
     match /voucherRequests/{requestId} {
       allow read: if isActiveAdmin() || (isSignedIn() && resource.data.guestUid == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.guestUid == request.auth.uid;
+      allow create: if isSignedIn() && 
+        request.resource.data.guestUid == request.auth.uid &&
+        request.resource.data.status == 'requested' &&
+        request.resource.data.assignedAgentUid == null;
       allow update, delete: if false; // Server-only status review
     }
   }

@@ -190,6 +190,32 @@ export function ThreadClient() {
     const convDocRef = doc(db, 'chatConversations', conversationId);
     updateDoc(convDocRef, { agentTyping: false }).catch(() => {});
 
+    const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+    if (isSparkUat) {
+      try {
+        const auth = getFirebaseAuth();
+        const agentUid = auth.currentUser?.uid || 'support-agent';
+        const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
+        await addDoc(msgsRef, {
+          senderType: 'agent',
+          senderUid: agentUid,
+          messageType: 'text',
+          text: cleanText,
+          createdAt: serverTimestamp(),
+        });
+        await updateDoc(convDocRef, {
+          status: 'active',
+          userUnreadCount: 1,
+          lastMessageAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (fsErr: any) {
+        console.error('Direct Firestore reply failed:', fsErr);
+        setErrorMessage(fsErr?.message || 'Failed to send reply.');
+      }
+      return;
+    }
+
     try {
       const functions = getFirebaseFunctions();
       const sendMsgFn = httpsCallable<{ conversationId: string; text: string; messageType: string }, { messageId: string }>(
@@ -202,8 +228,28 @@ export function ThreadClient() {
         messageType: 'text',
       });
     } catch (err: any) {
-      console.error('Failed to send agent reply:', err);
-      setErrorMessage(err.message || 'Failed to send reply.');
+      console.warn('Cloud Function reply unavailable. Falling back to direct Firestore:', err);
+      try {
+        const auth = getFirebaseAuth();
+        const agentUid = auth.currentUser?.uid || 'support-agent';
+        const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
+        await addDoc(msgsRef, {
+          senderType: 'agent',
+          senderUid: agentUid,
+          messageType: 'text',
+          text: cleanText,
+          createdAt: serverTimestamp(),
+        });
+        await updateDoc(convDocRef, {
+          status: 'active',
+          userUnreadCount: 1,
+          lastMessageAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (fsErr: any) {
+        console.error('Firestore fallback reply failed:', fsErr);
+        setErrorMessage(fsErr?.message || 'Failed to send reply.');
+      }
     }
   };
 
@@ -235,6 +281,20 @@ export function ThreadClient() {
 
   const handleCloseConversation = async () => {
     if (!conversationId) return;
+    const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+    const db = getFirebaseFirestore();
+    const convDocRef = doc(db, 'chatConversations', conversationId);
+
+    if (isSparkUat) {
+      try {
+        await updateDoc(convDocRef, { status: 'closed', updatedAt: serverTimestamp() });
+      } catch (fsErr) {
+        console.error('Direct Firestore close failed:', fsErr);
+        setErrorMessage('Failed to close conversation.');
+      }
+      return;
+    }
+
     try {
       const functions = getFirebaseFunctions();
       const closeFn = httpsCallable<{ conversationId: string; resolutionNote?: string }, { success: boolean }>(
@@ -243,13 +303,32 @@ export function ThreadClient() {
       );
       await closeFn({ conversationId, resolutionNote: 'Support agent marked this thread resolved.' });
     } catch (err: any) {
-      console.error('Failed to close conversation:', err);
-      setErrorMessage('Failed to close conversation.');
+      console.warn('Cloud Function close unavailable. Falling back to direct Firestore:', err);
+      try {
+        await updateDoc(convDocRef, { status: 'closed', updatedAt: serverTimestamp() });
+      } catch (fsErr) {
+        console.error('Firestore fallback close failed:', fsErr);
+        setErrorMessage('Failed to close conversation.');
+      }
     }
   };
 
   const handleBlockUser = async () => {
     if (!conversationId) return;
+    const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+    const db = getFirebaseFirestore();
+    const convDocRef = doc(db, 'chatConversations', conversationId);
+
+    if (isSparkUat) {
+      try {
+        await updateDoc(convDocRef, { status: 'blocked', updatedAt: serverTimestamp() });
+      } catch (fsErr) {
+        console.error('Direct Firestore block failed:', fsErr);
+        setErrorMessage('Failed to block user.');
+      }
+      return;
+    }
+
     try {
       const functions = getFirebaseFunctions();
       const blockFn = httpsCallable<{ conversationId: string; reason?: string }, { success: boolean }>(
@@ -258,8 +337,13 @@ export function ThreadClient() {
       );
       await blockFn({ conversationId, reason: 'Abusive support interaction.' });
     } catch (err: any) {
-      console.error('Failed to block user:', err);
-      setErrorMessage('Failed to block user.');
+      console.warn('Cloud Function block unavailable. Falling back to direct Firestore:', err);
+      try {
+        await updateDoc(convDocRef, { status: 'blocked', updatedAt: serverTimestamp() });
+      } catch (fsErr) {
+        console.error('Firestore fallback block failed:', fsErr);
+        setErrorMessage('Failed to block user.');
+      }
     }
   };
 

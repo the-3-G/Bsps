@@ -5,13 +5,14 @@
   "targets": {
     "bspc-be4f8": {
       "hosting": {
-        "dapp-staging": [
-          "bspc-dapp-staging"
-        ],
         "admin-staging": [
           "bspc-admin-staging"
+        ],
+        "dapp-staging": [
+          "bspc-dapp-staging"
         ]
       }
     }
-  }
+  },
+  "etags": {}
 }

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2 } from 'lucide-react';
 import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 interface ChatMessage {
@@ -79,7 +79,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
             if (convSnap.exists()) {
               const data = convSnap.data();
               // Verify ownership
-              if (data.guestId === currentUser.uid) {
+              if (data.guestId === currentUser.uid || data.authenticatedUid === currentUser.uid) {
                 validConvId = storedConvId;
                 setStatus(data.status);
               }
@@ -95,31 +95,93 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         } else {
           // Clear stale state
           localStorage.removeItem('bspc_support_conversation_id');
-          // Create new conversation via Callable Function
           setIsCreating(true);
           setErrorMessage(null);
-          try {
-            const createConvFn = httpsCallable<{
-              subject?: string;
-              source: string;
-              initialMessage?: string;
-            }, { conversationId: string; guestLabel: string }>(functions, 'createSupportConversation');
 
-            const res = await createConvFn({
-              source: initialSource,
-              subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
-              initialMessage: 'Hello. Please tell us how we can assist you with your voucher.',
-            });
+          const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
 
-            const newId = res.data.conversationId;
-            localStorage.setItem('bspc_support_conversation_id', newId);
-            setConversationId(newId);
-            setStatus('waiting');
-          } catch (err: any) {
-            console.error('Conversation creation failed:', err);
-            setErrorMessage(err.message || 'Failed to connect to customer support.');
-          } finally {
-            setIsCreating(false);
+          if (isSparkUat) {
+            // Spark UAT Mode: Direct Firestore document creation under security rules
+            try {
+              const newConvRef = doc(collection(db, 'chatConversations'));
+              const newId = newConvRef.id;
+              const now = serverTimestamp();
+
+              await setDoc(newConvRef, {
+                guestId: currentUser.uid,
+                authenticatedUid: currentUser.uid,
+                guestLabel: `Guest ${shortCode}`,
+                status: 'waiting',
+                assignedAgentUid: null,
+                source: initialSource,
+                subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+                createdAt: now,
+                updatedAt: now,
+                lastMessageAt: now,
+                userUnreadCount: 0,
+                agentUnreadCount: 0,
+              });
+
+              localStorage.setItem('bspc_support_conversation_id', newId);
+              setConversationId(newId);
+              setStatus('waiting');
+            } catch (err: any) {
+              console.error('Direct Firestore conversation creation failed:', err);
+              setErrorMessage('Failed to connect to customer support.');
+            } finally {
+              setIsCreating(false);
+            }
+          } else {
+            // Try Cloud Function first, fallback to direct Firestore if Functions unavailable
+            try {
+              const createConvFn = httpsCallable<{
+                subject?: string;
+                source: string;
+                initialMessage?: string;
+              }, { conversationId: string; guestLabel: string }>(functions, 'createSupportConversation');
+
+              const res = await createConvFn({
+                source: initialSource,
+                subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+                initialMessage: 'Hello. Please tell us how we can assist you with your voucher.',
+              });
+
+              const newId = res.data.conversationId;
+              localStorage.setItem('bspc_support_conversation_id', newId);
+              setConversationId(newId);
+              setStatus('waiting');
+            } catch (fnErr: any) {
+              console.warn('Cloud Functions unavailable. Falling back to Spark UAT Firestore creation:', fnErr?.message || fnErr);
+              try {
+                const newConvRef = doc(collection(db, 'chatConversations'));
+                const newId = newConvRef.id;
+                const now = serverTimestamp();
+
+                await setDoc(newConvRef, {
+                  guestId: currentUser.uid,
+                  authenticatedUid: currentUser.uid,
+                  guestLabel: `Guest ${shortCode}`,
+                  status: 'waiting',
+                  assignedAgentUid: null,
+                  source: initialSource,
+                  subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+                  createdAt: now,
+                  updatedAt: now,
+                  lastMessageAt: now,
+                  userUnreadCount: 0,
+                  agentUnreadCount: 0,
+                });
+
+                localStorage.setItem('bspc_support_conversation_id', newId);
+                setConversationId(newId);
+                setStatus('waiting');
+              } catch (fsErr: any) {
+                console.error('Spark UAT Firestore fallback conversation creation failed:', fsErr);
+                setErrorMessage(fsErr?.message || 'Failed to connect to customer support.');
+              }
+            } finally {
+              setIsCreating(false);
+            }
           }
         }
       }

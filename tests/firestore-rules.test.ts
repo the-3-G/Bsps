@@ -237,4 +237,131 @@ describe('Firestore Security Rules Emulator Tests', () => {
     const userDb = testEnv.authenticatedContext('evm_user', { actorType: 'wallet_user' }).firestore();
     await assertFails(userDb.collection('loginEvents').doc('log-001').set({ eventType: 'FORGED_LOGIN' }));
   });
+
+  it('16. Spark UAT: Guest can create own waiting chat conversation', async () => {
+    if (!hasEmulator) return;
+
+    const guestUid = 'guest_user_123';
+    const guestDb = testEnv.authenticatedContext(guestUid, {}).firestore();
+    await assertSucceeds(guestDb.collection('chatConversations').doc('conv_spark_01').set({
+      guestId: guestUid,
+      authenticatedUid: guestUid,
+      guestLabel: 'Guest 1234',
+      status: 'waiting',
+      assignedAgentUid: null,
+      source: 'receive_voucher',
+      subject: 'Voucher Request',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastMessageAt: new Date(),
+      userUnreadCount: 0,
+      agentUnreadCount: 0,
+    }));
+  });
+
+  it('17. Spark UAT: Guest CANNOT create chat conversation for another UID', async () => {
+    if (!hasEmulator) return;
+
+    const guestDb = testEnv.authenticatedContext('guest_user_123', {}).firestore();
+    await assertFails(guestDb.collection('chatConversations').doc('conv_spark_02').set({
+      guestId: 'OTHER_VICTIM_UID',
+      authenticatedUid: 'OTHER_VICTIM_UID',
+      status: 'waiting',
+      assignedAgentUid: null,
+      source: 'receive_voucher',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastMessageAt: new Date(),
+      userUnreadCount: 0,
+      agentUnreadCount: 0,
+    }));
+  });
+
+  it('18. Spark UAT: Guest CANNOT set assignedAgentUid or non-waiting status on creation', async () => {
+    if (!hasEmulator) return;
+
+    const guestUid = 'guest_user_123';
+    const guestDb = testEnv.authenticatedContext(guestUid, {}).firestore();
+    await assertFails(guestDb.collection('chatConversations').doc('conv_spark_03').set({
+      guestId: guestUid,
+      authenticatedUid: guestUid,
+      status: 'assigned',
+      assignedAgentUid: 'rogue_agent',
+      source: 'receive_voucher',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastMessageAt: new Date(),
+      userUnreadCount: 0,
+      agentUnreadCount: 0,
+    }));
+  });
+
+  it('19. Spark UAT: Guest CANNOT send message with senderType agent or system', async () => {
+    if (!hasEmulator) return;
+
+    const guestUid = 'guest_user_123';
+    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+      await adminContext.firestore().collection('chatConversations').doc('conv_spark_04').set({
+        guestId: guestUid,
+        authenticatedUid: guestUid,
+        status: 'waiting',
+      });
+    });
+
+    const guestDb = testEnv.authenticatedContext(guestUid, {}).firestore();
+    await assertFails(guestDb.collection('chatConversations').doc('conv_spark_04').collection('messages').doc('msg_01').set({
+      senderUid: guestUid,
+      senderType: 'agent',
+      messageType: 'text',
+      text: 'Impersonated Agent Reply',
+    }));
+  });
+
+  it('20. Spark UAT: Support role admin can assign conversation and send agent reply', async () => {
+    if (!hasEmulator) return;
+
+    const guestUid = 'guest_user_123';
+    const supportUid = 'agent_support_99';
+    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+      await adminContext.firestore().collection('chatConversations').doc('conv_spark_05').set({
+        guestId: guestUid,
+        authenticatedUid: guestUid,
+        status: 'waiting',
+      });
+    });
+
+    const supportDb = testEnv.authenticatedContext(supportUid, { role: 'support' }).firestore();
+    await assertSucceeds(supportDb.collection('chatConversations').doc('conv_spark_05').update({
+      assignedAgentUid: supportUid,
+      status: 'assigned',
+    }));
+
+    await assertSucceeds(supportDb.collection('chatConversations').doc('conv_spark_05').collection('messages').doc('msg_02').set({
+      senderUid: supportUid,
+      senderType: 'agent',
+      messageType: 'text',
+      text: 'Official Support Reply',
+    }));
+  });
+
+  it('21. Spark UAT: Auditor or read_only role CANNOT send agent reply message', async () => {
+    if (!hasEmulator) return;
+
+    const guestUid = 'guest_user_123';
+    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+      await adminContext.firestore().collection('chatConversations').doc('conv_spark_06').set({
+        guestId: guestUid,
+        authenticatedUid: guestUid,
+        status: 'waiting',
+      });
+    });
+
+    const auditorDb = testEnv.authenticatedContext('auditor_user', { role: 'auditor' }).firestore();
+    await assertFails(auditorDb.collection('chatConversations').doc('conv_spark_06').collection('messages').doc('msg_03').set({
+      senderUid: 'auditor_user',
+      senderType: 'agent',
+      messageType: 'text',
+      text: 'Unauthorized Agent Reply',
+    }));
+  });
 });
