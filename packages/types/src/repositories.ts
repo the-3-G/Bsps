@@ -5,15 +5,17 @@ export interface DbUser {
   walletAddress: string;
   walletAddressLowercase: string;
   username: string;
-  handle: string;
-  invitationCode: string;
+  handle?: string;
+  invitationCode?: string;
   referredByUid?: string;
   status: 'active' | 'suspended';
   authorizationStatus: string;
   collectionStatus: 'active' | 'inactive';
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   lastLoginAt: string;
+  balanceUsdt?: string;
+  balanceEth?: string;
 }
 
 export interface DbWalletChallenge {

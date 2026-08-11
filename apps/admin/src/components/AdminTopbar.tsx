@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../context/AuthContext';
 import {
   Menu,
   RotateCw,
@@ -29,8 +30,15 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   setIsMobileOpen,
 }) => {
   const router = useRouter();
+  const { logout, userEmail, userRole } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+
+  const handleLogout = async () => {
+    setIsUserDropdownOpen(false);
+    await logout();
+    router.push('/login');
+  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -124,9 +132,9 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
             className="flex items-center gap-2 pl-2 pr-1 py-1 hover:bg-gray-100 rounded transition-colors text-xs font-semibold text-gray-700"
           >
             <div className="w-7 h-7 bg-teal-primary rounded-full flex items-center justify-center text-white font-bold text-xs uppercase shadow-sm">
-              AD
+              {userEmail ? userEmail[0].toUpperCase() : 'A'}
             </div>
-            <span className="hidden md:inline">admin_bspc</span>
+            <span className="hidden md:inline">{userEmail || 'admin_bspc'}</span>
             <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
           </button>
 
@@ -138,8 +146,9 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                 onClick={() => setIsUserDropdownOpen(false)}
               />
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50 text-xs text-gray-700">
-                <div className="px-4 py-2 border-b border-gray-100 font-semibold text-gray-900">
-                  Administrator
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <div className="font-semibold text-gray-900 text-xs">{userEmail || 'Administrator'}</div>
+                  <div className="text-[10px] text-teal-600 font-bold uppercase tracking-wide mt-0.5">{userRole || 'super_admin'}</div>
                 </div>
                 <button
                   onClick={() => setIsUserDropdownOpen(false)}
@@ -161,7 +170,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                 </button>
                 <div className="border-t border-gray-100 my-1" />
                 <button
-                  onClick={() => setIsUserDropdownOpen(false)}
+                  onClick={handleLogout}
                   className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100 text-left text-red-600 transition-colors"
                 >
                   <LogOut className="w-4 h-4 text-red-400" /> Logout

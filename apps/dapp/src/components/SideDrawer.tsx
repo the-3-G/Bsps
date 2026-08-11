@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, Home, Image, TrendingUp, Cpu, FileText, UserCheck, MessageSquare } from 'lucide-react';
 
 interface SideDrawerProps {
@@ -22,6 +23,7 @@ const MENU_ITEMS = [
 ];
 
 export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenChat }: SideDrawerProps) {
+  const router = useRouter();
   // Lock body scroll when open
   useEffect(() => {
     if (isOpen) {
@@ -176,7 +178,7 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
           {/* Account Login / Customer Service */}
           {headerState === 'guest' ? (
             <button
-              onClick={() => { onClose(); onLoginTap(); }}
+              onClick={() => { onClose(); router.push('/connect'); }}
               style={{
                 width: '100%',
                 display: 'flex',

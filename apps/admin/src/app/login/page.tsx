@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { UserRole } from '@bspc/types';
 import { getFirebaseAuth, getFirebaseFunctions } from '@bspc/firebase';
-import { signInAnonymously } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 
 export default function LoginPage() {
@@ -36,30 +36,18 @@ export default function LoginPage() {
 
     try {
       const auth = getFirebaseAuth();
-      const functions = getFirebaseFunctions();
 
-      // 1. Attempt Firebase emulator Auth & custom claims
-      try {
-        const userCredential = await signInAnonymously(auth);
-        const uid = userCredential.user.uid;
+      // Sign in with email & password (requires the admin user to be created via bootstrap script)
+      await signInWithEmailAndPassword(auth, email, password);
 
-        const devSetAdminClaimsFn = httpsCallable<{ uid: string; role: string }, { success: boolean }>(
-          functions,
-          'devSetAdminClaims'
-        );
-        await devSetAdminClaimsFn({ uid, role });
-        await userCredential.user.getIdToken(true);
-      } catch (emErr: any) {
-        console.warn('Firebase emulator claims step warning (proceeding with local admin session):', emErr?.message || emErr);
-      }
-
-      // 2. Update frontend context state & navigate to admin console
+      // Update frontend context state & navigate to admin console
+      // (onAuthStateChanged in AuthContext will handle role extraction from custom claims)
       await login(email, role);
       setIsLoading(false);
       router.push('/admin/console');
     } catch (err: any) {
       console.error('Admin authentication error:', err);
-      setErrorMessage(err.message || 'Authentication failed. Please try again.');
+      setErrorMessage(err.message || 'Authentication failed. Please check your email and password.');
       setIsLoading(false);
     }
   };

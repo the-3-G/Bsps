@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserRole } from '@bspc/types';
+import { getFirebaseAuth } from '@bspc/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 interface SessionInfo {
   deviceId: string;
@@ -18,7 +20,7 @@ interface AuthContextType {
   isMfaEnabled: boolean;
   activeSessions: SessionInfo[];
   login: (email: string, role: UserRole) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   reauthenticate: (password: string) => Promise<boolean>;
   revokeSession: (deviceId: string) => void;
 }
@@ -43,43 +45,60 @@ const DEFAULT_SESSIONS: SessionInfo[] = [
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return Boolean(sessionStorage.getItem('admin-email') && sessionStorage.getItem('admin-role'));
-  });
-  const [userEmail, setUserEmail] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('admin-email');
-  });
-  const [userRole, setUserRole] = useState<UserRole | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('admin-role') as UserRole;
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [isMfaEnabled] = useState(true);
   const [activeSessions, setActiveSessions] = useState<SessionInfo[]>(DEFAULT_SESSIONS);
 
+  // Sync Firebase Auth state and extract custom claim role
   useEffect(() => {
-    if (typeof window !== 'undefined' && isAuthenticated) {
-      // UX navigation cookie (Security is enforced server-side via Firebase Auth Custom Claims)
-      document.cookie = 'admin-session=active; path=/';
+    try {
+      const auth = getFirebaseAuth();
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          const tokenResult = await firebaseUser.getIdTokenResult();
+          const role = (tokenResult.claims.role as UserRole) || null;
+          // Only grant admin session if user has a valid admin role claim
+          if (role && ['super_admin', 'operations_admin', 'finance_reviewer', 'support', 'auditor', 'read_only'].includes(role)) {
+            setIsAuthenticated(true);
+            setUserEmail(firebaseUser.email);
+            setUserRole(role);
+            document.cookie = 'admin-session=active; path=/';
+          } else {
+            // Signed in but no admin claim — sign them out
+            await signOut(auth);
+            setIsAuthenticated(false);
+            setUserEmail(null);
+            setUserRole(null);
+          }
+        } else {
+          setIsAuthenticated(false);
+          setUserEmail(null);
+          setUserRole(null);
+          document.cookie = 'admin-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        }
+      });
+      return () => unsubscribe();
+    } catch {
+      return () => {};
     }
-  }, [isAuthenticated]);
+  }, []);
 
-  const login = async (email: string, role: UserRole) => {
-    setIsAuthenticated(true);
-    setUserEmail(email);
-    setUserRole(role);
-    sessionStorage.setItem('admin-email', email);
-    sessionStorage.setItem('admin-role', role);
+  // login() is called after signInWithEmailAndPassword succeeds in the login page
+  // It just sets the session cookie; Firebase onAuthStateChanged handles the rest.
+  const login = async (_email: string, _role: UserRole) => {
     document.cookie = 'admin-session=active; path=/';
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      const auth = getFirebaseAuth();
+      await signOut(auth);
+    } catch { /* ignore */ }
     setIsAuthenticated(false);
     setUserEmail(null);
     setUserRole(null);
-    sessionStorage.removeItem('admin-email');
-    sessionStorage.removeItem('admin-role');
     document.cookie = 'admin-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   };
 

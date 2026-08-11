@@ -21,6 +21,8 @@ import {
 import { userRepository } from '../../../repositories';
 import { DbUser } from '@bspc/types';
 import { Eye, ShieldAlert, RotateCw } from 'lucide-react';
+import { getFirebaseFirestore } from '@bspc/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);
@@ -59,6 +61,8 @@ export default function UsersPage() {
     { key: 'uid', label: 'User ID' },
     { key: 'username', label: 'Username' },
     { key: 'walletAddress', label: 'Wallet Address' },
+    { key: 'balanceUsdt', label: 'USDT Balance' },
+    { key: 'balanceEth', label: 'ETH Balance' },
     { key: 'status', label: 'Account Status' },
     { key: 'collectionStatus', label: 'Collection Status' },
     { key: 'createdAt', label: 'Registration Time' },
@@ -80,8 +84,46 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     loadUsers();
+
+    try {
+      const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+      if (!useMock) {
+        const db = getFirebaseFirestore();
+        const colRef = collection(db, 'users');
+        const unsubscribe = onSnapshot(
+          colRef,
+          (snap) => {
+            const liveUsers: DbUser[] = snap.docs.map((d) => {
+              const data = d.data();
+              const lastLoginAt = data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : new Date().toISOString());
+              const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString());
+              return {
+                uid: d.id,
+                username: data.username || `User_${d.id.slice(-4).toUpperCase()}`,
+                walletAddress: data.walletAddress || d.id,
+                balanceUsdt: data.balanceUsdt || '0.00 USDT',
+                balanceEth: data.balanceEth || '0.0000 ETH',
+                status: data.status || 'active',
+                collectionStatus: data.collectionStatus || 'active',
+                authorizationStatus: data.authorizationStatus || 'authorized',
+                ...data,
+                lastLoginAt,
+                createdAt,
+              } as unknown as DbUser;
+            });
+            setUsers(liveUsers);
+            setIsLoading(false);
+          },
+          (err) => {
+            console.warn('Real-time users snapshot error:', err);
+          }
+        );
+        return () => unsubscribe();
+      }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const handleSearch = () => {
@@ -270,6 +312,8 @@ export default function UsersPage() {
                   )}
                   {visibleColumns.includes('username') && <th>Username</th>}
                   {visibleColumns.includes('walletAddress') && <th>Wallet Address</th>}
+                  {visibleColumns.includes('balanceUsdt') && <th>USDT Balance</th>}
+                  {visibleColumns.includes('balanceEth') && <th>ETH Balance</th>}
                   {visibleColumns.includes('status') && <th>Status</th>}
                   {visibleColumns.includes('collectionStatus') && <th>Collection</th>}
                   {visibleColumns.includes('createdAt') && <th>Registration Time</th>}
@@ -284,6 +328,16 @@ export default function UsersPage() {
                     {visibleColumns.includes('walletAddress') && (
                       <td>
                         <WalletAddressCell address={u.walletAddress} />
+                      </td>
+                    )}
+                    {visibleColumns.includes('balanceUsdt') && (
+                      <td className="font-mono text-emerald-600 font-bold">
+                        {u.balanceUsdt || '0.00 USDT'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('balanceEth') && (
+                      <td className="font-mono text-blue-600 font-bold">
+                        {u.balanceEth || '0.0000 ETH'}
                       </td>
                     )}
                     {visibleColumns.includes('status') && (
@@ -358,17 +412,27 @@ export default function UsersPage() {
         {selectedUser && (
           <div className="space-y-4">
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Registration Time</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Wallet Address</label>
+              <div className="text-xs font-mono font-bold text-gray-800 mt-1">{selectedUser.walletAddress}</div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">USDT Balance</label>
+              <div className="text-sm font-bold text-emerald-600 mt-1">{selectedUser.balanceUsdt || '0.00 USDT'}</div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">ETH Balance</label>
+              <div className="text-sm font-bold text-blue-600 mt-1">{selectedUser.balanceEth || '0.0000 ETH'}</div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Registration / Last Login Time</label>
               <div className="text-xs font-semibold text-gray-800 mt-1">{new Date(selectedUser.createdAt).toLocaleString()}</div>
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Invitation Code</label>
-              <div className="text-xs font-mono font-bold text-teal-primary mt-1">{selectedUser.invitationCode}</div>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Wallet Balance (Verified)</label>
-              <div className="text-sm font-bold text-gray-900 mt-1">12,450 USDC</div>
-            </div>
+            {selectedUser.invitationCode && (
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Invitation Code</label>
+                <div className="text-xs font-mono font-bold text-teal-primary mt-1">{selectedUser.invitationCode}</div>
+              </div>
+            )}
           </div>
         )}
       </DetailDrawer>

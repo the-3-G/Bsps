@@ -130,7 +130,7 @@ export default function PledgesPage() {
     .filter((p) => {
       const f = appliedFilters;
       const matchesUserId = f.userId ? p.userId.toLowerCase().includes(f.userId.toLowerCase()) : true;
-      const matchesWallet = f.userAddress ? p.userAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
+      const matchesWallet = f.wallet ? p.userAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
       const matchesState = f.state === 'all' || p.status === f.state;
       const matchesTier = f.tier === 'all' || p.tier === f.tier;
       return matchesUserId && matchesWallet && matchesState && matchesTier;

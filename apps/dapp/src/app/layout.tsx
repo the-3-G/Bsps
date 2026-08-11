@@ -5,21 +5,32 @@ import './globals.css';
 import { Web3Provider } from '../context/Web3Context';
 import { LayoutDashboard, Wallet, Layers, Users, Landmark, Share2 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { CustomerServiceModal } from '../components/CustomerServiceModal';
 import { ChatDrawer } from '../components/ChatDrawer';
 import { SideDrawer } from '../components/SideDrawer';
 
+import { useWeb3 } from '../context/Web3Context';
+
 // Routes that show the authenticated bottom navigation
 const AUTH_ROUTES = ['/dashboard', '/assets', '/pledges', '/referrals', '/withdraw'];
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+function DAppLayoutInner({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const { connectWallet, isConnected, address } = useWeb3();
   const [headerState, setHeaderState] = useState<'guest' | 'login_selected' | 'voucher_requested'>('guest');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSideDrawerOpen, setIsSideDrawerOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  // Sync headerState when wallet is connected
+  useEffect(() => {
+    if (isConnected || address) {
+      setHeaderState('login_selected');
+    }
+  }, [isConnected, address]);
 
   // Scroll-aware sticky header
   useEffect(() => {
@@ -28,9 +39,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const handleHeaderButtonClick = () => {
+  const handleHeaderButtonClick = async () => {
     if (headerState === 'guest') {
-      setHeaderState('login_selected');
+      try {
+        await connectWallet();
+        setHeaderState('login_selected');
+      } catch (err) {
+        console.warn('In-page connect error:', err);
+        router.push('/connect');
+      }
     } else if (headerState === 'login_selected') {
       setIsModalOpen(true);
     } else {
@@ -49,6 +66,144 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     headerState === 'login_selected' ? 'Receive Voucher' : 'Open Chat';
 
   return (
+    <>
+      {/* ── STICKY HEADER ────────────────────────────────── */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          height: '86px',
+          paddingTop: 'env(safe-area-inset-top)',
+          background: '#00172E',
+          borderBottom: '1px solid rgba(255,211,77,0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          transition: 'background 0.3s, border-color 0.3s',
+        }}
+      >
+        {/* Left Group: Hamburger + BSP wordmark */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            id="menu-open-btn"
+            onClick={() => setIsSideDrawerOpen(true)}
+            aria-label="Open menu"
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: 'rgba(3,44,92,0.6)',
+              border: '1px solid rgba(255,211,77,0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4.5,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ display: 'block', width: 18, height: 2, background: '#FFD34D', borderRadius: 2 }} />
+            <span style={{ display: 'block', width: 13, height: 2, background: '#FFD34D', borderRadius: 2, alignSelf: 'flex-start', marginLeft: 3 }} />
+            <span style={{ display: 'block', width: 18, height: 2, background: '#FFD34D', borderRadius: 2 }} />
+          </button>
+
+          <span style={{
+            fontWeight: 800,
+            fontSize: 32,
+            color: '#FFD34D',
+            letterSpacing: '-0.03em',
+            lineHeight: 1,
+          }}>BSP</span>
+        </div>
+
+        {/* Right Group: Share + Login/Voucher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <button
+            id="share-btn"
+            aria-label="Share"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 11,
+              background: 'rgba(255,211,77,0.06)',
+              border: '1px solid rgba(255,211,77,0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <Share2 size={18} color="#FFD34D" />
+          </button>
+
+          <button
+            id="header-action-btn"
+            onClick={handleHeaderButtonClick}
+            style={{
+              height: 44,
+              padding: '0 16px',
+              borderRadius: 10,
+              background: '#FFD34D',
+              color: '#00172E',
+              fontWeight: 800,
+              fontSize: headerBtnLabel === 'Receive Voucher' ? 12 : 14,
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+              letterSpacing: '-0.01em',
+              flexShrink: 0,
+            }}
+          >
+            {headerBtnLabel}
+          </button>
+        </div>
+      </header>
+
+      {/* ── MAIN CONTENT ─────────────────────────────────── */}
+      <main style={{ flex: 1, width: '100%' }}>
+        {children}
+      </main>
+
+      {/* ── FLOATING ACTIONS ─────────────────────────────── */}
+      <FloatingActions
+        hasUnreadChat={hasUnreadChat}
+        onOpenChat={handleOpenChat}
+      />
+
+      {/* ── AUTH BOTTOM NAV (dashboard routes only) ──────── */}
+      <DAppBottomNav />
+
+      {/* ── MODALS / DRAWERS ─────────────────────────────── */}
+      <CustomerServiceModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onOpenChat={handleOpenChat}
+      />
+
+      <ChatDrawer
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        initialSource={headerState === 'login_selected' ? 'receive_voucher' : 'general_support'}
+      />
+
+      <SideDrawer
+        isOpen={isSideDrawerOpen}
+        onClose={() => setIsSideDrawerOpen(false)}
+        headerState={headerState}
+        onLoginTap={() => setHeaderState('login_selected')}
+        onOpenChat={handleOpenChat}
+      />
+    </>
+  );
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
     <html lang="en" className="h-full">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -63,137 +218,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full bg-section-navy m-0 p-0 text-white flex flex-col">
         <Web3Provider>
-          {/* ── STICKY HEADER ────────────────────────────────── */}
-          <header
-            style={{
-              position: 'sticky',
-              top: 0,
-              zIndex: 50,
-              height: '86px',
-              paddingTop: 'env(safe-area-inset-top)',
-              background: '#00172E',
-              borderBottom: '1px solid rgba(255,211,77,0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0 16px',
-              transition: 'background 0.3s, border-color 0.3s',
-            }}
-          >
-            {/* Left Group: Hamburger + BSP wordmark */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                id="menu-open-btn"
-                onClick={() => setIsSideDrawerOpen(true)}
-                aria-label="Open menu"
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: '50%',
-                  background: 'rgba(3,44,92,0.6)',
-                  border: '1px solid rgba(255,211,77,0.25)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 4.5,
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{ display: 'block', width: 18, height: 2, background: '#FFD34D', borderRadius: 2 }} />
-                <span style={{ display: 'block', width: 13, height: 2, background: '#FFD34D', borderRadius: 2, alignSelf: 'flex-start', marginLeft: 3 }} />
-                <span style={{ display: 'block', width: 18, height: 2, background: '#FFD34D', borderRadius: 2 }} />
-              </button>
-
-              <span style={{
-                fontWeight: 800,
-                fontSize: 32,
-                color: '#FFD34D',
-                letterSpacing: '-0.03em',
-                lineHeight: 1,
-              }}>BSP</span>
-            </div>
-
-            {/* Right Group: Share + Login/Voucher */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              <button
-                id="share-btn"
-                aria-label="Share"
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 11,
-                  background: 'rgba(255,211,77,0.06)',
-                  border: '1px solid rgba(255,211,77,0.35)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                <Share2 size={18} color="#FFD34D" />
-              </button>
-
-              <button
-                id="header-action-btn"
-                onClick={handleHeaderButtonClick}
-                style={{
-                  width: 122,
-                  height: 48,
-                  borderRadius: 11,
-                  background: 'linear-gradient(135deg,#FFD34D 0%,#E6C45F 100%)',
-                  color: '#00172E',
-                  fontWeight: 800,
-                  fontSize: headerBtnLabel === 'Receive Voucher' ? 12 : 14,
-                  border: 'none',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                  letterSpacing: '-0.01em',
-                  flexShrink: 0,
-                }}
-              >
-                {headerBtnLabel}
-              </button>
-            </div>
-          </header>
-
-          {/* ── MAIN CONTENT ─────────────────────────────────── */}
-          <main style={{ flex: 1, width: '100%' }}>
-            {children}
-          </main>
-
-          {/* ── FLOATING ACTIONS ─────────────────────────────── */}
-          <FloatingActions
-            hasUnreadChat={hasUnreadChat}
-            onOpenChat={handleOpenChat}
-          />
-
-          {/* ── AUTH BOTTOM NAV (dashboard routes only) ──────── */}
-          <DAppBottomNav />
-
-          {/* ── MODALS / DRAWERS ─────────────────────────────── */}
-          <CustomerServiceModal
-            isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
-            onOpenChat={handleOpenChat}
-          />
-
-          <ChatDrawer
-            isOpen={isChatOpen}
-            onClose={() => setIsChatOpen(false)}
-            initialSource={headerState === 'login_selected' ? 'receive_voucher' : 'general_support'}
-          />
-
-          <SideDrawer
-            isOpen={isSideDrawerOpen}
-            onClose={() => setIsSideDrawerOpen(false)}
-            headerState={headerState}
-            onLoginTap={() => setHeaderState('login_selected')}
-            onOpenChat={handleOpenChat}
-          />
+          <DAppLayoutInner>{children}</DAppLayoutInner>
         </Web3Provider>
       </body>
     </html>

@@ -64,7 +64,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
 
     const userUid = 'evm_95222290dd7278aa3ddd389cc1e1d165cc4bafe5';
 
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('users').doc(userUid).set({
         uid: userUid,
         walletAddress: '0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5',
@@ -83,7 +83,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
     const user1 = 'evm_user1';
     const user2 = 'evm_user2';
 
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('users').doc(user2).set({
         uid: user2,
         walletAddress: '0xUser2',
@@ -100,7 +100,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
 
     const userUid = 'evm_95222290dd7278aa3ddd389cc1e1d165cc4bafe5';
 
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('users').doc(userUid).set({
         uid: userUid,
         walletAddress: '0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5',
@@ -170,7 +170,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
 
     const userUid = 'evm_user';
 
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('withdrawalRequests').doc('w-001').set({
         requestId: 'w-001',
         userUid,
@@ -185,7 +185,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
   it('10. Auditor custom claim can read adminAuditLogs', async () => {
     if (!hasEmulator) return;
 
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('adminAuditLogs').doc('log-001').set({
         logId: 'log-001',
         action: 'UPDATE_STATUS',
@@ -206,7 +206,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
   it('12. Super admin custom claim has full read access to adminProfiles', async () => {
     if (!hasEmulator) return;
 
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('adminProfiles').doc('admin_super').set({
         uid: 'admin_super',
         role: 'super_admin',
@@ -300,7 +300,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
     if (!hasEmulator) return;
 
     const guestUid = 'guest_user_123';
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('chatConversations').doc('conv_spark_04').set({
         guestId: guestUid,
         authenticatedUid: guestUid,
@@ -322,7 +322,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
 
     const guestUid = 'guest_user_123';
     const supportUid = 'agent_support_99';
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('chatConversations').doc('conv_spark_05').set({
         guestId: guestUid,
         authenticatedUid: guestUid,
@@ -348,7 +348,7 @@ describe('Firestore Security Rules Emulator Tests', () => {
     if (!hasEmulator) return;
 
     const guestUid = 'guest_user_123';
-    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
       await adminContext.firestore().collection('chatConversations').doc('conv_spark_06').set({
         guestId: guestUid,
         authenticatedUid: guestUid,

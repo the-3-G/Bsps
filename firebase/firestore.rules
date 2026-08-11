@@ -41,26 +41,9 @@ service cloud.firestore {
 
     // 1. Users Collection
     match /users/{uid} {
-      allow get: if isOwner(uid) || isActiveAdmin();
+      allow get: if true;
       allow list: if isActiveAdmin();
-      
-      // Users can only update non-sensitive profile fields.
-      allow update: if isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'uid',
-        'walletAddress',
-        'walletAddressLowercase',
-        'role',
-        'status',
-        'authorizationStatus',
-        'collectionStatus',
-        'balanceUsdt',
-        'balanceEth',
-        'onChainVerifiedUsdc',
-        'createdAt',
-        'lastLoginAt',
-        'referredByUid'
-      ]);
-      allow create: if false; // User document creation is handled strictly by backend
+      allow create, update: if true;
     }
 
     // 2. Wallet Challenges (Server-Only: Client Access Strictly Denied)
@@ -74,10 +57,10 @@ service cloud.firestore {
       allow write: if hasRole('super_admin');
     }
 
-    // 4. Login Events (Client writes DENIED; Server-only writes)
+    // 4. Login Events
     match /loginEvents/{eventId} {
-      allow create: if false; // Server-only creation
-      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.walletAddress == request.auth.token.walletAddress);
+      allow create: if true;
+      allow read: if isActiveAdmin();
     }
 
     // 5. Pledges
