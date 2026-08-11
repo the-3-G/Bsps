@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PageHeader,
   StatusBadge,
@@ -18,13 +18,51 @@ import {
   SortHeader,
 } from '../../../components/ui/DataTable';
 import { mockWithdrawals, MockWithdrawalRequest } from '../../../mocks/db';
+import { withdrawalRepository } from '../../../repositories';
 import { ShieldAlert } from 'lucide-react';
 
 export default function WithdrawalsPage() {
+  const [withdrawalsList, setWithdrawalsList] = useState<MockWithdrawalRequest[]>([]);
   const [userIdFilter, setUserIdFilter] = useState('');
   const [usernameFilter, setUsernameFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setWithdrawalsList(mockWithdrawals);
+      return;
+    }
+
+    withdrawalRepository
+      .listRequests()
+      .then((items: any[]) => {
+        const mapped: MockWithdrawalRequest[] = items.map((w: any) => ({
+          id: w.requestId || w.id || '',
+          submissionTime: w.createdAt?.toDate
+            ? w.createdAt.toDate().toISOString()
+            : w.createdAt || new Date().toISOString(),
+          userId: w.uid || w.userId || '',
+          username: w.username || w.uid?.slice(0, 8) || 'User',
+          userAddress: w.destinationAddress || w.userAddress || '',
+          group: w.group || 'Standard',
+          handler: w.handler || 'Unassigned',
+          amount: w.amountUsdt ? `${w.amountUsdt} USDT` : w.amount || '0 USDT',
+          handlingFee: w.feeUsdt ? `${w.feeUsdt} USDT` : w.handlingFee || '0 USDT',
+          status: w.status || 'pending',
+          reviewReason: w.reviewReason,
+          reviewer: w.reviewer,
+          reviewTime: w.reviewTime,
+          txHash: w.txHash,
+        }));
+        setWithdrawalsList(mapped);
+      })
+      .catch((err) => {
+        console.error('Failed to load withdrawals from repository:', err);
+        setWithdrawalsList([]);
+      });
+  }, []);
 
   const [appliedFilters, setAppliedFilters] = useState({
     userId: '',
@@ -95,33 +133,58 @@ export default function WithdrawalsPage() {
     }
   };
 
-  const handleActionConfirm = () => {
+  const handleActionConfirm = async () => {
     if (reviewReq && reviewAction) {
-      const idx = mockWithdrawals.findIndex((w) => w.id === reviewReq.id);
-      if (idx !== -1) {
-        let nextStatus: MockWithdrawalRequest['status'] = reviewReq.status;
-        let hash = reviewReq.txHash;
+      let nextStatus: MockWithdrawalRequest['status'] = reviewReq.status;
+      let hash = reviewReq.txHash;
 
-        if (reviewAction === 'approve') {
-          nextStatus = 'approved';
-          hash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-        } else if (reviewAction === 'reject') {
-          nextStatus = 'rejected';
-        } else if (reviewAction === 'clarification') {
-          nextStatus = 'clarification';
-        } else if (reviewAction === 'submit') {
-          nextStatus = 'submitted';
-        }
-
-        mockWithdrawals[idx] = {
-          ...mockWithdrawals[idx],
-          status: nextStatus,
-          reviewReason: reviewAction === 'reject' ? rejectionReason : undefined,
-          reviewer: 'admin_bspc',
-          reviewTime: new Date().toISOString(),
-          txHash: hash,
-        };
+      if (reviewAction === 'approve') {
+        nextStatus = 'approved';
+        hash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      } else if (reviewAction === 'reject') {
+        nextStatus = 'rejected';
+      } else if (reviewAction === 'clarification') {
+        nextStatus = 'clarification';
+      } else if (reviewAction === 'submit') {
+        nextStatus = 'submitted';
       }
+
+      const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+      if (useMock) {
+        const idx = mockWithdrawals.findIndex((w) => w.id === reviewReq.id);
+        if (idx !== -1) {
+          mockWithdrawals[idx] = {
+            ...mockWithdrawals[idx],
+            status: nextStatus,
+            reviewReason: reviewAction === 'reject' ? rejectionReason : undefined,
+            reviewer: 'admin_bspc',
+            reviewTime: new Date().toISOString(),
+            txHash: hash,
+          };
+        }
+      } else {
+        try {
+          await withdrawalRepository.reviewRequest(reviewReq.id, nextStatus as any, rejectionReason);
+        } catch (err) {
+          console.error('Failed to review withdrawal via repository:', err);
+        }
+      }
+
+      setWithdrawalsList((prev) =>
+        prev.map((w) =>
+          w.id === reviewReq.id
+            ? {
+                ...w,
+                status: nextStatus,
+                reviewReason: reviewAction === 'reject' ? rejectionReason : undefined,
+                reviewer: 'admin_bspc',
+                reviewTime: new Date().toISOString(),
+                txHash: hash,
+              }
+            : w
+        )
+      );
+
       setIsConfirmOpen(false);
       setReviewReq(null);
       setReviewAction(null);
@@ -129,7 +192,7 @@ export default function WithdrawalsPage() {
     }
   };
 
-  const filtered = mockWithdrawals
+  const filtered = withdrawalsList
     .filter((w) => {
       const f = appliedFilters;
       const matchesUserId = f.userId ? w.userId.toLowerCase().includes(f.userId.toLowerCase()) : true;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PageHeader,
   StatusBadge,
@@ -18,12 +18,48 @@ import {
   SortHeader,
 } from '../../../components/ui/DataTable';
 import { mockPledges, MockPledgeRecord } from '../../../mocks/db';
+import { pledgeRepository } from '../../../repositories';
 
 export default function PledgesPage() {
+  const [pledgesList, setPledgesList] = useState<MockPledgeRecord[]>([]);
   const [userIdFilter, setUserIdFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('all');
   const [tierFilter, setTierFilter] = useState('all');
+
+  useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setPledgesList(mockPledges);
+      return;
+    }
+
+    pledgeRepository
+      .listPledges()
+      .then((items: any[]) => {
+        const mapped: MockPledgeRecord[] = items.map((p: any) => ({
+          id: p.pledgeId || p.id || '',
+          userId: p.uid || p.userId || '',
+          userAddress: p.walletAddress || p.userAddress || '',
+          tier: p.tier || 'Tier 1',
+          amountThreshold: p.amountThreshold || '1000 USDT',
+          miningRatio: p.miningRatio || '1.2%',
+          miningReward: p.rewardUsdt ? `${p.rewardUsdt} USDT` : p.miningReward || '0 USDT',
+          collectionAmount: p.collectionUsdt ? `${p.collectionUsdt} USDT` : p.collectionAmount || '0 USDT',
+          topUpAmount: p.topUpUsdt ? `${p.topUpUsdt} USDT` : p.topUpAmount || '0 USDT',
+          ethReward: p.rewardEth ? `${p.rewardEth} ETH` : p.ethReward || '0 ETH',
+          participationTime: p.createdAt?.toDate ? p.createdAt.toDate().toISOString() : p.participationTime || '',
+          endTime: p.endTime || 'Active',
+          status: p.status || 'mining',
+          txHash: p.txHash || '',
+        }));
+        setPledgesList(mapped);
+      })
+      .catch((err) => {
+        console.error('Failed to load pledges from repository:', err);
+        setPledgesList([]);
+      });
+  }, []);
 
   const [appliedFilters, setAppliedFilters] = useState({
     userId: '',
@@ -90,11 +126,11 @@ export default function PledgesPage() {
     }
   };
 
-  const filteredPledges = mockPledges
+  const filteredPledges = pledgesList
     .filter((p) => {
       const f = appliedFilters;
       const matchesUserId = f.userId ? p.userId.toLowerCase().includes(f.userId.toLowerCase()) : true;
-      const matchesWallet = f.wallet ? p.userAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
+      const matchesWallet = f.userAddress ? p.userAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
       const matchesState = f.state === 'all' || p.status === f.state;
       const matchesTier = f.tier === 'all' || p.tier === f.tier;
       return matchesUserId && matchesWallet && matchesState && matchesTier;

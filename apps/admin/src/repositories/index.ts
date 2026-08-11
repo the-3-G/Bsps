@@ -2,7 +2,7 @@ import { IUserRepository, IWithdrawalRepository, IPledgeRepository } from '@bspc
 import { FirebaseUserRepository, FirebaseWithdrawalRepository, FirebasePledgeRepository } from './FirebaseRepository';
 import { MockUserRepository, MockWithdrawalRepository, MockPledgeRepository } from './MockRepository';
 
-const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA !== 'false';
+const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 
 export const userRepository: IUserRepository = useMock
   ? new MockUserRepository()

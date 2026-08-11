@@ -62,7 +62,7 @@ export interface ChainConfig {
 }
 
 export function loadChainConfig(): ChainConfig {
-  const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA !== 'false';
+  const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
   if (isMock) {
     // Return deterministic mock settings for local development
     return {

@@ -64,15 +64,29 @@ describe('truncateAddress', () => {
 
 // ─── loadChainConfig ─────────────────────────────────────────────────────────
 
-describe('loadChainConfig (mock mode)', () => {
-  it('returns a well-formed config when mock mode is active', () => {
-    // NEXT_PUBLIC_USE_MOCK_DATA defaults to truthy/not-'false' in test environment
+describe('loadChainConfig', () => {
+  it('returns deterministic mock config when mock mode is explicitly true', () => {
+    process.env.NEXT_PUBLIC_USE_MOCK_DATA = 'true';
     const config = loadChainConfig();
-    expect(config.chainId).toBeTypeOf('number');
+    expect(config.chainId).toBe(11155111);
     expect(config.rpcUrl).toMatch(/^https?:\/\//);
     expect(config.explorerUrl).toMatch(/^https?:\/\//);
     expect(config.usdcAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(config.decimals).toBe(6);
-    expect(config.requiredConfirmations).toBeGreaterThanOrEqual(1);
+  });
+
+  it('loads chain config from environment variables when mock mode is false', () => {
+    process.env.NEXT_PUBLIC_USE_MOCK_DATA = 'false';
+    process.env.NEXT_PUBLIC_CHAIN_ID = '11155111';
+    process.env.NEXT_PUBLIC_RPC_URL = 'https://rpc.sepolia.org';
+    process.env.NEXT_PUBLIC_EXPLORER_URL = 'https://sepolia.etherscan.io';
+    process.env.NEXT_PUBLIC_USDC_ADDRESS = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+    process.env.NEXT_PUBLIC_USDC_DECIMALS = '6';
+
+    const config = loadChainConfig();
+    expect(config.chainId).toBe(11155111);
+    expect(config.rpcUrl).toBe('https://rpc.sepolia.org');
+    expect(config.usdcAddress).toBe('0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238');
   });
 });
+

@@ -128,7 +128,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     setAuthStep('detecting');
 
     try {
-      const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA !== 'false';
+      const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
       const provider = getEthereumProvider();
 
       if (!provider && !isMock) {
@@ -209,7 +209,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     setAuthStep('signing');
 
     try {
-      const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA !== 'false';
+      const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
       const provider = getEthereumProvider();
 
       let signature = '0xmockSignatureHex1234567890abcdef';

@@ -1,15 +1,44 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, StatusBadge } from '../../../components/ui/Reusables';
 import { mockLoginRecords, mockUsers } from '../../../mocks/db';
+import { userRepository } from '../../../repositories';
 import { Users, Cpu, DollarSign, Clock, ShieldAlert, KeyRound } from 'lucide-react';
 import { ExportButton } from '../../../components/ui/DataTable';
 
 export default function ConsolePage() {
-  const totalUsers = mockUsers.length;
-  const activeUsers = mockUsers.filter((u) => u.status === 'active').length;
-  const suspendedUsers = totalUsers - activeUsers;
+  const [totalUsers, setTotalUsers] = useState<number>(0);
+  const [activeUsers, setActiveUsers] = useState<number>(0);
+  const [suspendedUsers, setSuspendedUsers] = useState<number>(0);
+
+  useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      const tot = mockUsers.length;
+      const act = mockUsers.filter((u) => u.status === 'active').length;
+      setTotalUsers(tot);
+      setActiveUsers(act);
+      setSuspendedUsers(tot - act);
+      return;
+    }
+
+    userRepository
+      .listUsers()
+      .then((users) => {
+        const tot = users.length;
+        const act = users.filter((u) => u.status === 'active').length;
+        setTotalUsers(tot);
+        setActiveUsers(act);
+        setSuspendedUsers(tot - act);
+      })
+      .catch((err) => {
+        console.error('Failed to load user stats from repository:', err);
+        setTotalUsers(0);
+        setActiveUsers(0);
+        setSuspendedUsers(0);
+      });
+  }, []);
 
   // Masking states for security demonstration
   const [hasAuditPermission, setHasAuditPermission] = useState(false);
