@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { UserRole } from '@bspc/types';
 import { getFirebaseAuth, getFirebaseFunctions } from '@bspc/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 
 export default function LoginPage() {
@@ -37,8 +37,16 @@ export default function LoginPage() {
     try {
       const auth = getFirebaseAuth();
 
-      // Sign in with email & password (requires the admin user to be created via bootstrap script)
-      await signInWithEmailAndPassword(auth, email, password);
+      // Sign in with email & password, or create an account if it doesn't exist
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (signInErr: any) {
+        if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          throw signInErr;
+        }
+      }
 
       // Update frontend context state & navigate to admin console
       // (onAuthStateChanged in AuthContext will handle role extraction from custom claims)

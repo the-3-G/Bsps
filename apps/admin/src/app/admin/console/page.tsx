@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, StatusBadge } from '../../../components/ui/Reusables';
 import { mockLoginRecords, mockUsers } from '../../../mocks/db';
-import { userRepository } from '../../../repositories';
+import { userRepository, loginEventRepository } from '../../../repositories';
+import { DbLoginEvent } from '@bspc/types';
 import { Users, Cpu, DollarSign, Clock, ShieldAlert, KeyRound } from 'lucide-react';
 import { ExportButton } from '../../../components/ui/DataTable';
 
@@ -11,6 +12,7 @@ export default function ConsolePage() {
   const [totalUsers, setTotalUsers] = useState<number>(0);
   const [activeUsers, setActiveUsers] = useState<number>(0);
   const [suspendedUsers, setSuspendedUsers] = useState<number>(0);
+  const [loginRecords, setLoginRecords] = useState<any[]>([]);
 
   useEffect(() => {
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
@@ -20,6 +22,7 @@ export default function ConsolePage() {
       setTotalUsers(tot);
       setActiveUsers(act);
       setSuspendedUsers(tot - act);
+      setLoginRecords(mockLoginRecords);
       return;
     }
 
@@ -37,6 +40,22 @@ export default function ConsolePage() {
         setTotalUsers(0);
         setActiveUsers(0);
         setSuspendedUsers(0);
+      });
+
+    loginEventRepository
+      .listLoginEvents(15) // fetch recent 15 logins
+      .then((events) => {
+        setLoginRecords(events.map(ev => ({
+          id: ev.eventId,
+          timestamp: ev.createdAt,
+          ipAddress: ev.ipHash,
+          approxLocation: ev.countryCode || 'Unknown',
+          device: ev.userAgentSummary,
+          result: ev.success ? 'success' : 'failed'
+        })));
+      })
+      .catch((err) => {
+        console.error('Failed to load login events:', err);
       });
   }, []);
 
@@ -62,7 +81,7 @@ export default function ConsolePage() {
               {hasAuditPermission ? 'Revoke Audit View' : 'Request Audit View'}
             </button>
             <ExportButton
-              data={mockLoginRecords as unknown as Record<string, unknown>[]}
+              data={loginRecords as unknown as Record<string, unknown>[]}
               filename="login_audit_logs"
             />
           </div>
@@ -139,7 +158,7 @@ export default function ConsolePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {mockLoginRecords.map((log) => {
+                {loginRecords.map((log) => {
                   const maskedIp = log.ipAddress.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)/, '$1.$2.***.***');
                   return (
                     <tr key={log.id} className="hover:bg-gray-50/50">

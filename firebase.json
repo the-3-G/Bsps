@@ -45,12 +45,7 @@
           ]
         }
       ],
-      "rewrites": [
-        {
-          "source": "**",
-          "destination": "/index.html"
-        }
-      ]
+      "cleanUrls": true
     },
     {
       "target": "admin-staging",
@@ -87,12 +82,7 @@
           ]
         }
       ],
-      "rewrites": [
-        {
-          "source": "**",
-          "destination": "/index.html"
-        }
-      ]
+      "cleanUrls": true
     }
   ],
   "emulators": {

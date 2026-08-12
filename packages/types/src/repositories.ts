@@ -225,3 +225,7 @@ export interface IWithdrawalRepository {
 export interface IPledgeRepository {
   listPledges(): Promise<DbPledge[]>;
 }
+
+export interface ILoginEventRepository {
+  listLoginEvents(limit?: number): Promise<DbLoginEvent[]>;
+}

@@ -13,7 +13,7 @@ export function middleware(request: NextRequest) {
   // Protect admin paths for UI navigation
   if (pathname.startsWith('/admin')) {
     // Look for mock or auth session tokens
-    const adminToken = request.cookies.get('admin-session');
+    const adminToken = request.cookies.get('__session');
     
     if (!adminToken) {
       // Redirect unauthenticated visitors to login

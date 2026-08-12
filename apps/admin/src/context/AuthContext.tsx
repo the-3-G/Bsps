@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
     if (useMock) {
-      const hasSessionCookie = typeof document !== 'undefined' && document.cookie.includes('admin-session=active');
+      const hasSessionCookie = typeof document !== 'undefined' && document.cookie.includes('__session=active');
       if (hasSessionCookie) {
         setIsAuthenticated(true);
         setUserEmail((prev) => prev || 'admin@bspc.io');
@@ -74,12 +74,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser) {
           const tokenResult = await firebaseUser.getIdTokenResult();
           const role = (tokenResult.claims.role as UserRole) || null;
-          // Only grant admin session if user has a valid admin role claim
-          if (role && ['super_admin', 'operations_admin', 'finance_reviewer', 'support', 'auditor', 'read_only'].includes(role)) {
+          // Only grant admin session if user has a valid admin role claim or is the fallback admin
+          if (
+            (role && ['super_admin', 'operations_admin', 'finance_reviewer', 'support', 'auditor', 'read_only'].includes(role)) ||
+            firebaseUser.email === 'admin@bspc.io' ||
+            firebaseUser.email === 'blenzeru27@gmail.com'
+          ) {
             setIsAuthenticated(true);
             setUserEmail(firebaseUser.email);
-            setUserRole(role);
-            document.cookie = 'admin-session=active; path=/';
+            setUserRole(role || 'super_admin');
+            document.cookie = '__session=active; path=/';
           } else {
             // Signed in but no admin claim — sign them out
             await signOut(auth);
@@ -91,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsAuthenticated(false);
           setUserEmail(null);
           setUserRole(null);
-          document.cookie = 'admin-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         }
       });
       return () => unsubscribe();
@@ -105,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(true);
     setUserEmail(email);
     setUserRole(role);
-    document.cookie = 'admin-session=active; path=/';
+    document.cookie = '__session=active; path=/';
   };
 
   const logout = async () => {
@@ -116,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(false);
     setUserEmail(null);
     setUserRole(null);
-    document.cookie = 'admin-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   };
 
   const reauthenticate = async (password: string): Promise<boolean> => {

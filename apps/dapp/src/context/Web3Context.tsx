@@ -219,24 +219,35 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     };
   }, [getEthereumProvider, address]);
 
-  // Silent auto-connect on mount if inside Bitget Wallet DApp Browser
+  // Auto-connect on mount if session exists in localStorage
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const provider = getEthereumProvider();
-    if (!provider) return;
+    const savedAddress = localStorage.getItem('user-address');
+    const savedChainId = localStorage.getItem('user-chain-id');
+    if (savedAddress) {
+      setAddress(savedAddress);
+      setIsConnected(true);
+      setAuthStep('authenticated');
+      if (savedChainId) {
+        setChainId(parseInt(savedChainId, 10));
+      }
 
-    provider
-      .request({ method: 'eth_accounts' })
-      .then(async (accounts: string[]) => {
-        if (accounts && accounts.length > 0) {
-          const connectedAddress = sanitizeAndChecksumAddress(accounts[0]);
-          setAddress(connectedAddress);
-          setIsConnected(true);
-          const { ethBalance, usdtBalance } = await fetchWalletBalances(provider, connectedAddress);
-          await syncUserToFirestore(connectedAddress, ethBalance, usdtBalance);
-        }
-      })
-      .catch(() => {});
+      // Check silently if the wallet is still connected and matches the saved address
+      const provider = getEthereumProvider();
+      if (provider) {
+        provider.request({ method: 'eth_accounts' })
+          .then((accounts: any) => {
+            if (accounts && accounts.length > 0) {
+              const currentAddr = accounts[0];
+              if (currentAddr.toLowerCase() !== savedAddress.toLowerCase()) {
+                disconnectWallet();
+              }
+            } else {
+              disconnectWallet();
+            }
+          })
+          .catch(() => {});
+      }
+    }
   }, [getEthereumProvider]);
 
   // Step 1: Detect & Connect Accounts
