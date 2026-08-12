@@ -49,7 +49,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
         setHeaderState('login_selected');
       }
     } else if (headerState === 'login_selected') {
-      setIsModalOpen(true);
+      router.push('/dashboard');
     } else {
       setIsChatOpen(true);
     }
@@ -63,7 +63,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
 
   const headerBtnLabel =
     headerState === 'guest' ? 'Login' :
-    headerState === 'login_selected' ? 'Receive Voucher' : 'Open Chat';
+    headerState === 'login_selected' ? 'Dashboard' : 'Open Chat';
 
   return (
     <>
@@ -150,7 +150,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
               background: '#FFD34D',
               color: '#00172E',
               fontWeight: 800,
-              fontSize: headerBtnLabel === 'Receive Voucher' ? 12 : 14,
+              fontSize: headerBtnLabel === 'Dashboard' ? 12 : 14,
               border: 'none',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
