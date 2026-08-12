@@ -53,6 +53,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sync Firebase Auth state and extract custom claim role
   useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      const hasSessionCookie = typeof document !== 'undefined' && document.cookie.includes('admin-session=active');
+      if (hasSessionCookie) {
+        setIsAuthenticated(true);
+        setUserEmail((prev) => prev || 'admin@bspc.io');
+        setUserRole((prev) => prev || 'super_admin');
+      } else {
+        setIsAuthenticated(false);
+        setUserEmail(null);
+        setUserRole(null);
+      }
+      return;
+    }
+
     try {
       const auth = getFirebaseAuth();
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -86,8 +101,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // login() is called after signInWithEmailAndPassword succeeds in the login page
-  // It just sets the session cookie; Firebase onAuthStateChanged handles the rest.
-  const login = async (_email: string, _role: UserRole) => {
+  const login = async (email: string, role: UserRole) => {
+    setIsAuthenticated(true);
+    setUserEmail(email);
+    setUserRole(role);
     document.cookie = 'admin-session=active; path=/';
   };
 

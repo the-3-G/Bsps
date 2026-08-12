@@ -178,7 +178,10 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
           {/* Account Login / Customer Service */}
           {headerState === 'guest' ? (
             <button
-              onClick={() => { onClose(); router.push('/connect'); }}
+              onClick={() => {
+                onClose();
+                onLoginTap();
+              }}
               style={{
                 width: '100%',
                 display: 'flex',

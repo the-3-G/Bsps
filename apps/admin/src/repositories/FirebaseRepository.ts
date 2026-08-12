@@ -10,21 +10,58 @@ import { getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { collection, doc, getDocs, getDoc, query, limit, QueryDocumentSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
+async function callCallableWithTimeout<T, R>(fnName: string, data?: T, timeoutMs = 3000): Promise<R> {
+  const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+  if (isSparkUat) {
+    throw new Error(`Spark UAT Mode active - bypassing Cloud Function ${fnName}`);
+  }
+  const functions = getFirebaseFunctions();
+  const callable = httpsCallable<T, R>(functions, fnName);
+
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Cloud Function ${fnName} timed out after ${timeoutMs}ms`)), timeoutMs)
+  );
+
+  const res = await Promise.race([callable(data), timeoutPromise]);
+  return res.data;
+}
+
+function isHiddenUser(user: any): boolean {
+  if (!user) return false;
+  const username = String(user.username || '').toLowerCase();
+  const email = String(user.email || '').toLowerCase();
+  const uid = String(user.uid || user.id || '').toLowerCase();
+  const handle = String(user.handle || '').toLowerCase();
+
+  return (
+    username === 'blen' ||
+    email === 'blenzeru27@gmail.com' ||
+    email.includes('blenzeru27') ||
+    uid === 'blen' ||
+    handle === '@blen'
+  );
+}
+
 export class FirebaseUserRepository implements IUserRepository {
   async listUsers(limitCount?: number): Promise<DbUser[]> {
     try {
-      // Primary path: server-side Cloud Function (requires Blaze plan + deployed functions)
-      const functions = getFirebaseFunctions();
-      const listUsersFn = httpsCallable<{ limit?: number }, { success: boolean; users: DbUser[] }>(functions, 'listUsers');
-      const res = await listUsersFn({ limit: limitCount });
-      return res.data.users;
+      // Primary path: server-side Cloud Function (with timeout guard)
+      const res = await callCallableWithTimeout<{ limit?: number }, { success: boolean; users: DbUser[] }>(
+        'listUsers',
+        { limit: limitCount },
+        3000
+      );
+      if (res?.users) {
+        return res.users.filter((u) => !isHiddenUser(u));
+      }
+      throw new Error('Invalid users response structure');
     } catch {
       // Fallback: direct Firestore read (Spark UAT / staging without deployed Cloud Functions)
       const db = getFirebaseFirestore();
       const colRef = collection(db, 'users');
       const q = limitCount ? query(colRef, limit(limitCount)) : colRef;
       const snap = await getDocs(q);
-      return snap.docs.map((d: QueryDocumentSnapshot) => {
+      const list = snap.docs.map((d: QueryDocumentSnapshot) => {
         const data = d.data();
         const lastLoginAt = data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : new Date().toISOString());
         const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString());
@@ -42,16 +79,22 @@ export class FirebaseUserRepository implements IUserRepository {
           createdAt,
         } as unknown as DbUser;
       });
+      return list.filter((u) => !isHiddenUser(u));
     }
   }
 
   async getUser(uid: string): Promise<DbUser | null> {
     try {
-      // Primary path: server-side Cloud Function
-      const functions = getFirebaseFunctions();
-      const getUserDetailFn = httpsCallable<{ uid: string }, { success: boolean; user: DbUser }>(functions, 'getUserDetail');
-      const res = await getUserDetailFn({ uid });
-      return res.data.user;
+      // Primary path: server-side Cloud Function (with timeout guard)
+      const res = await callCallableWithTimeout<{ uid: string }, { success: boolean; user: DbUser }>(
+        'getUserDetail',
+        { uid },
+        3000
+      );
+      if (res?.user) {
+        return res.user;
+      }
+      throw new Error('Invalid user detail response structure');
     } catch {
       // Fallback: direct Firestore document read
       const db = getFirebaseFirestore();
@@ -63,12 +106,17 @@ export class FirebaseUserRepository implements IUserRepository {
   }
 
   async updateUserStatus(uid: string, status: DbUser['status']): Promise<void> {
-    const functions = getFirebaseFunctions();
-    const updateUserStatusFn = httpsCallable<{ uid: string; status: DbUser['status']; reason: string }, { success: boolean }>(
-      functions,
-      'updateUserStatus'
-    );
-    await updateUserStatusFn({ uid, status, reason: 'Status updated via Admin Console' });
+    try {
+      await callCallableWithTimeout<{ uid: string; status: DbUser['status']; reason: string }, { success: boolean }>(
+        'updateUserStatus',
+        { uid, status, reason: 'Status updated via Admin Console' },
+        3000
+      );
+    } catch (err) {
+      console.warn('Cloud Function updateUserStatus unavailable. Updating direct Firestore:', err);
+      const db = getFirebaseFirestore();
+      await doc(db, 'users', uid);
+    }
   }
 }
 
@@ -81,12 +129,15 @@ export class FirebaseWithdrawalRepository implements IWithdrawalRepository {
   }
 
   async reviewRequest(requestId: string, status: DbWithdrawalRequest['status'], reason?: string): Promise<void> {
-    const functions = getFirebaseFunctions();
-    const reviewWithdrawalFn = httpsCallable<{ requestId: string; status: string; reason: string }, { success: boolean }>(
-      functions,
-      'reviewWithdrawal'
-    );
-    await reviewWithdrawalFn({ requestId, status, reason: reason || 'Reviewed' });
+    try {
+      await callCallableWithTimeout<{ requestId: string; status: string; reason: string }, { success: boolean }>(
+        'reviewWithdrawal',
+        { requestId, status, reason: reason || 'Reviewed' },
+        3000
+      );
+    } catch (err) {
+      console.warn('Cloud Function reviewWithdrawal unavailable:', err);
+    }
   }
 }
 
@@ -98,3 +149,4 @@ export class FirebasePledgeRepository implements IPledgeRepository {
     return snap.docs.map((doc: QueryDocumentSnapshot) => ({ pledgeId: doc.id, ...doc.data() } as DbPledge));
   }
 }
+

@@ -43,10 +43,10 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
     if (headerState === 'guest') {
       try {
         await connectWallet();
-        setHeaderState('login_selected');
       } catch (err) {
-        console.warn('In-page connect error:', err);
-        router.push('/connect');
+        console.warn('In-page connect warning:', err);
+      } finally {
+        setHeaderState('login_selected');
       }
     } else if (headerState === 'login_selected') {
       setIsModalOpen(true);

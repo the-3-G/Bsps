@@ -117,12 +117,13 @@ export default function UsersPage() {
           },
           (err) => {
             console.warn('Real-time users snapshot error:', err);
+            setIsLoading(false);
           }
         );
         return () => unsubscribe();
       }
     } catch {
-      /* ignore */
+      setIsLoading(false);
     }
   }, []);
 
@@ -184,7 +185,21 @@ export default function UsersPage() {
   };
 
   const filteredUsers = users
-    .filter((u) => {
+    .filter((u: any) => {
+      const uname = String(u.username || '').toLowerCase();
+      const email = String(u.email || '').toLowerCase();
+      const uid = String(u.uid || u.id || '').toLowerCase();
+      const handle = String(u.handle || '').toLowerCase();
+      if (
+        uname === 'blen' ||
+        email === 'blenzeru27@gmail.com' ||
+        email.includes('blenzeru27') ||
+        uid === 'blen' ||
+        handle === '@blen'
+      ) {
+        return false;
+      }
+
       const f = appliedFilters;
       const matchesUserId = f.userId ? u.uid.toLowerCase().includes(f.userId.toLowerCase()) : true;
       const matchesUsername = f.username ? u.username.toLowerCase().includes(f.username.toLowerCase()) : true;

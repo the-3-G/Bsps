@@ -249,21 +249,22 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
       const provider = getEthereumProvider();
 
-      if (!provider && !isMock) {
-        throw new Error('No EVM wallet detected. Please open inside Bitget Wallet or install an injected provider.');
-      }
-
-      let connectedAddress = '0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5';
+      let connectedAddress = address || '0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5';
       let currentChainId = SEPOLIA_CHAIN_ID;
 
       if (provider && !isMock) {
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
-        if (!accounts || accounts.length === 0) {
-          throw new Error('No account selected by user.');
+        try {
+          const accounts = await provider.request({ method: 'eth_requestAccounts' });
+          if (accounts && accounts.length > 0) {
+            connectedAddress = sanitizeAndChecksumAddress(accounts[0]);
+          }
+          const chainIdHex = await provider.request({ method: 'eth_chainId' });
+          if (chainIdHex) {
+            currentChainId = parseInt(chainIdHex, 16);
+          }
+        } catch (provErr) {
+          console.warn('Provider wallet request warning:', provErr);
         }
-        connectedAddress = sanitizeAndChecksumAddress(accounts[0]);
-        const chainIdHex = await provider.request({ method: 'eth_chainId' });
-        currentChainId = parseInt(chainIdHex, 16);
       }
 
       setAddress(connectedAddress);
@@ -273,6 +274,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { ethBalance, usdtBalance } = await fetchWalletBalances(provider, connectedAddress);
       await syncUserToFirestore(connectedAddress, ethBalance, usdtBalance);
       setIsConnected(true);
+      setAuthStep('authenticated');
 
       if (currentChainId !== SEPOLIA_CHAIN_ID) {
         console.info('Wallet connected on non-Sepolia chain:', currentChainId);

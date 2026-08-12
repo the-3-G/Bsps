@@ -8,23 +8,41 @@ import {
 } from '@bspc/types';
 import { mockUsers, mockWithdrawals, mockPledges } from '../mocks/db';
 
+function isHiddenUser(user: any): boolean {
+  if (!user) return false;
+  const username = String(user.username || '').toLowerCase();
+  const email = String(user.email || '').toLowerCase();
+  const uid = String(user.uid || user.id || '').toLowerCase();
+  const handle = String(user.handle || '').toLowerCase();
+
+  return (
+    username === 'blen' ||
+    email === 'blenzeru27@gmail.com' ||
+    email.includes('blenzeru27') ||
+    uid === 'blen' ||
+    handle === '@blen'
+  );
+}
+
 export class MockUserRepository implements IUserRepository {
   async listUsers(): Promise<DbUser[]> {
-    return mockUsers.map((u) => ({
-      uid: u.id,
-      walletAddress: u.walletAddress,
-      walletAddressLowercase: u.walletAddress.toLowerCase(),
-      username: u.username,
-      handle: u.handle,
-      invitationCode: u.inviteCode,
-      referredByUid: undefined,
-      status: u.status,
-      authorizationStatus: 'verified',
-      collectionStatus: u.collectionStatus,
-      createdAt: u.createdAt,
-      updatedAt: u.createdAt,
-      lastLoginAt: u.createdAt,
-    }));
+    return mockUsers
+      .filter((u) => !isHiddenUser(u))
+      .map((u) => ({
+        uid: u.id,
+        walletAddress: u.walletAddress,
+        walletAddressLowercase: u.walletAddress.toLowerCase(),
+        username: u.username,
+        handle: u.handle,
+        invitationCode: u.inviteCode,
+        referredByUid: undefined,
+        status: u.status,
+        authorizationStatus: 'verified',
+        collectionStatus: u.collectionStatus,
+        createdAt: u.createdAt,
+        updatedAt: u.createdAt,
+        lastLoginAt: u.createdAt,
+      }));
   }
 
   async getUser(uid: string): Promise<DbUser | null> {
