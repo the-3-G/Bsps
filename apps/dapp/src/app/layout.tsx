@@ -18,7 +18,7 @@ const AUTH_ROUTES = ['/dashboard', '/assets', '/pledges', '/referrals', '/withdr
 function DAppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { connectWallet, isConnected, address } = useWeb3();
-  const [headerState, setHeaderState] = useState<'guest' | 'login_selected' | 'voucher_requested'>('guest');
+  const [headerState, setHeaderState] = useState<'guest' | 'voucher_requested'>('guest');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSideDrawerOpen, setIsSideDrawerOpen] = useState(false);
@@ -28,7 +28,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
   // Sync headerState when wallet is connected
   useEffect(() => {
     if (isConnected || address) {
-      setHeaderState('login_selected');
+      setHeaderState('voucher_requested');
     }
   }, [isConnected, address]);
 
@@ -46,10 +46,8 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.warn('In-page connect warning:', err);
       } finally {
-        setHeaderState('login_selected');
+        setHeaderState('voucher_requested');
       }
-    } else if (headerState === 'login_selected') {
-      router.push('/dashboard');
     } else {
       setIsChatOpen(true);
     }
@@ -61,9 +59,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
     setHasUnreadChat(false);
   };
 
-  const headerBtnLabel =
-    headerState === 'guest' ? 'Login' :
-    headerState === 'login_selected' ? 'Dashboard' : 'Open Chat';
+  const headerBtnLabel = headerState === 'guest' ? 'Login' : 'Receive Voucher';
 
   return (
     <>
@@ -150,7 +146,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
               background: '#FFD34D',
               color: '#00172E',
               fontWeight: 800,
-              fontSize: headerBtnLabel === 'Dashboard' ? 12 : 14,
+              fontSize: 13,
               border: 'none',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
@@ -188,14 +184,14 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
       <ChatDrawer
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
-        initialSource={headerState === 'login_selected' ? 'receive_voucher' : 'general_support'}
+        initialSource={headerState === 'voucher_requested' ? 'receive_voucher' : 'general_support'}
       />
 
       <SideDrawer
         isOpen={isSideDrawerOpen}
         onClose={() => setIsSideDrawerOpen(false)}
         headerState={headerState}
-        onLoginTap={() => setHeaderState('login_selected')}
+        onLoginTap={() => setHeaderState('voucher_requested')}
         onOpenChat={handleOpenChat}
       />
     </>

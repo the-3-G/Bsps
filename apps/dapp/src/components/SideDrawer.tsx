@@ -8,7 +8,7 @@ import { ChevronRight, Home, Image, TrendingUp, Cpu, FileText, UserCheck, Messag
 interface SideDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  headerState: 'guest' | 'login_selected' | 'voucher_requested';
+  headerState: 'guest' | 'voucher_requested';
   onLoginTap: () => void;
   onOpenChat: () => void;
 }
