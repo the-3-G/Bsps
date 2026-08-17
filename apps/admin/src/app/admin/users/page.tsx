@@ -20,9 +20,11 @@ import {
 } from '../../../components/ui/DataTable';
 import { userRepository } from '../../../repositories';
 import { DbUser } from '@bspc/types';
-import { Eye, ShieldAlert, RotateCw } from 'lucide-react';
+import Link from 'next/link';
+import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
+
 
 export default function UsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);
@@ -515,9 +517,22 @@ export default function UsersPage() {
                 <div className="text-xs font-mono font-bold text-teal-primary mt-1">{selectedUser.invitationCode}</div>
               </div>
             )}
+            <div className="border-t border-gray-200 pt-3 mt-4">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">User Loans & Credit</label>
+              <Link
+                href="/admin/loans"
+                className="inline-flex items-center justify-between w-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 px-3 py-2 rounded text-xs font-bold transition-all"
+              >
+                <span className="flex items-center gap-2">
+                  <Landmark className="w-4 h-4 text-amber-600" /> View User Loan Requests
+                </span>
+                <ExternalLink className="w-3.5 h-3.5 text-amber-600" />
+              </Link>
+            </div>
           </div>
         )}
       </DetailDrawer>
+
 
       <ConfirmationDialog
         isOpen={isConfirmOpen}

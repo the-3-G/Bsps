@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
+import { Landmark, ArrowRight } from 'lucide-react';
+
 import { PageHeader, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,6 +13,7 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
+
 
 interface ApplicationRequest {
   id: string;
@@ -132,6 +136,13 @@ export default function ApplicationCollectionPage() {
         subtitle="Automatic Sweeper configurations and node lease requests."
         actions={
           <div className="flex gap-2">
+            <Link
+              href="/admin/loans"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-all"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              Manage Loan Requests
+            </Link>
             <ColumnVisibilityMenu
               columns={allColumns}
               visibleColumns={visibleColumns}
@@ -139,11 +150,28 @@ export default function ApplicationCollectionPage() {
             />
             <ExportButton
               data={filtered as unknown as Record<string, unknown>[]}
-              filename="application_requests"
+              filename="application_requests_export"
             />
           </div>
         }
       />
+
+      {/* Banner linking to Loan Requests */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Landmark className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>
+            Looking for <strong>User Credit & Loan Applications</strong>? Review collateral coverage and approve loan requests in the dedicated portal.
+          </span>
+        </div>
+        <Link
+          href="/admin/loans"
+          className="inline-flex items-center gap-1 font-bold text-amber-800 hover:text-amber-950 underline shrink-0"
+        >
+          Open Loan Requests Portal <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
 
       <FilterBar>
         <FilterField label="Username">

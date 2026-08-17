@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2 } from 'lucide-react';
 import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
+
 import { httpsCallable } from 'firebase/functions';
 
 interface ChatMessage {
@@ -292,6 +293,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         conversationId,
         senderType: 'guest',
         senderUid: userUid || 'unknown',
+        messageType: 'text',
         text: cleanText,
         createdAt: serverTimestamp(),
       });
@@ -300,17 +302,14 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
       await updateDoc(convDocRef, {
         lastMessagePreview: cleanText.slice(0, 100),
         lastMessageAt: serverTimestamp(),
-        // Increment agent unread count: we do it using standard increment or firebase fields, but wait:
-        // agentUnreadCount is incremented by 1
-        agentUnreadCount: serverTimestamp(), // Wait, or we can useFieldValue.increment(1) if import is correct, let's keep it simple or use field increment. Let's see if we should import increment.
-        // Actually, we can import increment from firebase/firestore and use: agentUnreadCount: increment(1)
-        // Let's do that!
+        agentUnreadCount: increment(1),
         updatedAt: serverTimestamp(),
       });
     } catch (err: any) {
       console.error('Failed to send message:', err);
       setErrorMessage('Failed to send message. Please verify authorization.');
     }
+
   };
 
   if (!isOpen) return null;
