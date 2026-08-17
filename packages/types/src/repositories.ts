@@ -195,6 +195,23 @@ export interface DbLedgerEntry {
   createdAt: string;
 }
 
+export interface DbLoanRequest {
+  loanId: string;
+  userUid: string;
+  walletAddress: string;
+  amountUsdt: string;
+  interestRate: string;
+  termDays: number;
+  collateralUsdt: string;
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'repaid' | 'overdue';
+  reviewReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  repaidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DbAdminAuditLog {
   logId: string;
   actorUid: string;
@@ -225,3 +242,11 @@ export interface IWithdrawalRepository {
 export interface IPledgeRepository {
   listPledges(): Promise<DbPledge[]>;
 }
+
+export interface ILoanRepository {
+  listLoanRequests(): Promise<DbLoanRequest[]>;
+  createLoanRequest(loan: Omit<DbLoanRequest, 'loanId' | 'status' | 'createdAt' | 'updatedAt'>): Promise<string>;
+  reviewLoanRequest(loanId: string, status: DbLoanRequest['status'], reason?: string, reviewer?: string): Promise<void>;
+  repayLoan(loanId: string): Promise<void>;
+}
+

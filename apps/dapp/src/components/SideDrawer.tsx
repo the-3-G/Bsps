@@ -18,7 +18,8 @@ const MENU_ITEMS = [
   { label: 'NFT',       href: '/assets',    icon: Image },
   { label: 'Trading',   href: '/dashboard', icon: TrendingUp },
   { label: 'Pool Data', href: '/pledges',   icon: Cpu },
-  { label: 'Loan',      href: '/withdraw',  icon: FileText },
+  { label: 'Loan',      href: '/loan',      icon: FileText },
+
   { label: 'Paper',     href: '/referrals', icon: FileText },
 ];
 

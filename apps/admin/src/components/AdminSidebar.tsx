@@ -20,7 +20,9 @@ import {
   Shield,
   Menu,
   Headset,
+  Landmark,
 } from 'lucide-react';
+
 
 interface SidebarGroup {
   title: string;
@@ -84,6 +86,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       items: [
         { label: 'Mining Records', path: '/admin/mining-records', icon: <Cpu className="w-4 h-4" /> },
         { label: 'Withdrawal List', path: '/admin/withdrawals', icon: <ArrowDownCircle className="w-4 h-4" /> },
+        { label: 'Loan Requests', path: '/admin/loans', icon: <Landmark className="w-4 h-4" /> },
         {
           label: 'Application Collection',
           path: '/admin/application-collection',
@@ -96,6 +99,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         },
       ],
     },
+
     {
       title: 'NFT Management',
       icon: <Award className="w-4 h-4" />,

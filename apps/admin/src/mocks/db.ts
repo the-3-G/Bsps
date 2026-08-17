@@ -299,3 +299,34 @@ export const mockTeamReports: MockTeamReportRow[] = Array.from({ length: 10 }, (
   verifiedUsdc: `${Math.floor(random() * 40000 + 5000)} USDC`,
   recordedDate: new Date(2026, 7, 25 + (i % 2)).toISOString(),
 }));
+
+export interface MockLoanRecord {
+  id: string;
+  userId: string;
+  walletAddress: string;
+  amount: string;
+  interestRate: string;
+  termDays: number;
+  collateral: string;
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'repaid' | 'overdue';
+  reviewReason?: string;
+  reviewer?: string;
+  submissionTime: string;
+  reviewTime?: string;
+}
+
+export const mockLoans: MockLoanRecord[] = Array.from({ length: 8 }, (_, i) => ({
+  id: `loan-${i + 1}`,
+  userId: `u-${(i % 5) + 1}`,
+  walletAddress: generateAddress(100 + i),
+  amount: `${1000 * (i + 1)} USDT`,
+  interestRate: `${(0.05 + (i % 3) * 0.02).toFixed(2)}%/day`,
+  termDays: [7, 14, 30][i % 3],
+  collateral: `${1500 * (i + 1)} USDT`,
+  status: i % 4 === 0 ? 'pending' : i % 4 === 1 ? 'approved' : i % 4 === 2 ? 'repaid' : 'rejected',
+  reviewReason: i % 4 === 3 ? 'Insufficient active pledge collateral' : undefined,
+  reviewer: i % 4 !== 0 ? `admin_${(i % 2) + 1}` : undefined,
+  submissionTime: new Date(2026, 7, 10 + i).toISOString(),
+  reviewTime: i % 4 !== 0 ? new Date(2026, 7, 11 + i).toISOString() : undefined,
+}));
+

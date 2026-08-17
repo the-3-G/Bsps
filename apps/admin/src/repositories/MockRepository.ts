@@ -2,11 +2,14 @@ import {
   IUserRepository,
   IWithdrawalRepository,
   IPledgeRepository,
+  ILoanRepository,
   DbUser,
   DbWithdrawalRequest,
   DbPledge,
+  DbLoanRequest,
 } from '@bspc/types';
-import { mockUsers, mockWithdrawals, mockPledges } from '../mocks/db';
+import { mockUsers, mockWithdrawals, mockPledges, mockLoans } from '../mocks/db';
+
 
 function isHiddenUser(user: any): boolean {
   if (!user) return false;
@@ -137,3 +140,63 @@ export class MockPledgeRepository implements IPledgeRepository {
     }));
   }
 }
+
+export class MockLoanRepository implements ILoanRepository {
+  async listLoanRequests(): Promise<DbLoanRequest[]> {
+    return mockLoans.map((l) => ({
+      loanId: l.id,
+      userUid: l.userId,
+      walletAddress: l.walletAddress,
+      amountUsdt: l.amount,
+      interestRate: l.interestRate,
+      termDays: l.termDays,
+      collateralUsdt: l.collateral,
+      status: l.status,
+      reviewReason: l.reviewReason,
+      reviewedBy: l.reviewer,
+      reviewedAt: l.reviewTime,
+      createdAt: l.submissionTime,
+      updatedAt: l.submissionTime,
+    }));
+  }
+
+  async createLoanRequest(loan: Omit<DbLoanRequest, 'loanId' | 'status' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const newId = `loan-${mockLoans.length + 1}`;
+    mockLoans.unshift({
+      id: newId,
+      userId: loan.userUid,
+      walletAddress: loan.walletAddress,
+      amount: loan.amountUsdt,
+      interestRate: loan.interestRate,
+      termDays: loan.termDays,
+      collateral: loan.collateralUsdt,
+      status: 'pending',
+      submissionTime: new Date().toISOString(),
+    });
+    return newId;
+  }
+
+  async reviewLoanRequest(loanId: string, status: DbLoanRequest['status'], reason?: string, reviewer?: string): Promise<void> {
+    const idx = mockLoans.findIndex((l) => l.id === loanId);
+    if (idx !== -1) {
+      mockLoans[idx] = {
+        ...mockLoans[idx],
+        status,
+        reviewReason: reason,
+        reviewer,
+        reviewTime: new Date().toISOString(),
+      };
+    }
+  }
+
+  async repayLoan(loanId: string): Promise<void> {
+    const idx = mockLoans.findIndex((l) => l.id === loanId);
+    if (idx !== -1) {
+      mockLoans[idx] = {
+        ...mockLoans[idx],
+        status: 'repaid',
+      };
+    }
+  }
+}
+
