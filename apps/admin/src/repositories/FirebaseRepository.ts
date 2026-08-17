@@ -5,6 +5,8 @@ import {
   DbUser,
   DbWithdrawalRequest,
   DbPledge,
+  ILoginEventRepository,
+  DbLoginEvent,
 } from '@bspc/types';
 import { getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { collection, doc, getDocs, getDoc, query, limit, QueryDocumentSnapshot } from 'firebase/firestore';
@@ -190,3 +192,25 @@ export class FirebasePledgeRepository implements IPledgeRepository {
   }
 }
 
+export class FirebaseLoginEventRepository implements ILoginEventRepository {
+  async listLoginEvents(limitCount?: number): Promise<DbLoginEvent[]> {
+    const db = getFirebaseFirestore();
+    const colRef = collection(db, 'loginEvents');
+    const q = limitCount ? query(colRef, limit(limitCount)) : colRef;
+    const snap = await getDocs(q);
+    
+    return snap.docs.map((doc: QueryDocumentSnapshot) => {
+      const data = doc.data();
+      return {
+        eventId: doc.id,
+        uid: data.walletAddress || doc.id,
+        actorType: 'user',
+        ipHash: data.ipAddress || 'unknown',
+        countryCode: 'US', // default or extracted if available
+        userAgentSummary: data.userAgent || 'unknown',
+        success: data.loginResult === 'SUCCESS',
+        createdAt: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : new Date().toISOString(),
+      };
+    });
+  }
+}

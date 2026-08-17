@@ -3,12 +3,15 @@ import {
   IWithdrawalRepository,
   IPledgeRepository,
   ILoanRepository,
+  ILoginEventRepository,
   DbUser,
   DbWithdrawalRequest,
   DbPledge,
   DbLoanRequest,
+  DbLoginEvent,
 } from '@bspc/types';
-import { mockUsers, mockWithdrawals, mockPledges, mockLoans } from '../mocks/db';
+import { mockUsers, mockWithdrawals, mockPledges, mockLoans, mockLoginRecords } from '../mocks/db';
+
 
 
 function isHiddenUser(user: any): boolean {
@@ -199,4 +202,21 @@ export class MockLoanRepository implements ILoanRepository {
     }
   }
 }
+
+export class MockLoginEventRepository implements ILoginEventRepository {
+  async listLoginEvents(limitCount?: number): Promise<DbLoginEvent[]> {
+    const slice = limitCount ? mockLoginRecords.slice(0, limitCount) : mockLoginRecords;
+    return slice.map((rec) => ({
+      eventId: rec.id,
+      uid: rec.userAddress,
+      actorType: 'user',
+      ipHash: rec.ipAddress,
+      countryCode: rec.approxLocation,
+      userAgentSummary: rec.device,
+      success: rec.result === 'success',
+      createdAt: rec.timestamp,
+    }));
+  }
+}
+
 

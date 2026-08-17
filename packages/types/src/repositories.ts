@@ -250,3 +250,7 @@ export interface ILoanRepository {
   repayLoan(loanId: string): Promise<void>;
 }
 
+export interface ILoginEventRepository {
+  listLoginEvents(limit?: number): Promise<DbLoginEvent[]>;
+}
+

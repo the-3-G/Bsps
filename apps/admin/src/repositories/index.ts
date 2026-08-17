@@ -1,7 +1,24 @@
-import { IUserRepository, IWithdrawalRepository, IPledgeRepository, ILoanRepository } from '@bspc/types';
-import { FirebaseUserRepository, FirebaseWithdrawalRepository, FirebasePledgeRepository } from './FirebaseRepository';
+import {
+  IUserRepository,
+  IWithdrawalRepository,
+  IPledgeRepository,
+  ILoanRepository,
+  ILoginEventRepository,
+} from '@bspc/types';
+import {
+  FirebaseUserRepository,
+  FirebaseWithdrawalRepository,
+  FirebasePledgeRepository,
+  FirebaseLoginEventRepository,
+} from './FirebaseRepository';
 import { FirebaseLoanRepository } from './FirebaseLoanRepository';
-import { MockUserRepository, MockWithdrawalRepository, MockPledgeRepository, MockLoanRepository } from './MockRepository';
+import {
+  MockUserRepository,
+  MockWithdrawalRepository,
+  MockPledgeRepository,
+  MockLoanRepository,
+  MockLoginEventRepository,
+} from './MockRepository';
 
 const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 
@@ -20,4 +37,8 @@ export const pledgeRepository: IPledgeRepository = useMock
 export const loanRepository: ILoanRepository = useMock
   ? new MockLoanRepository()
   : new FirebaseLoanRepository();
+
+export const loginEventRepository: ILoginEventRepository = useMock
+  ? new MockLoginEventRepository()
+  : new FirebaseLoginEventRepository();
 
