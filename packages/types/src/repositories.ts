@@ -254,3 +254,33 @@ export interface ILoginEventRepository {
   listLoginEvents(limit?: number): Promise<DbLoginEvent[]>;
 }
 
+export interface IApplicationRepository {
+  listRequests(): Promise<DbApplicationRequest[]>;
+  reviewRequest(requestId: string, status: DbApplicationRequest['status'], reason?: string, reviewer?: string): Promise<void>;
+}
+
+export interface ICollectionRecordRepository {
+  listRecords(): Promise<DbCollectionRecord[]>;
+}
+
+export interface ILedgerRepository {
+  listEntries(limit?: number): Promise<DbLedgerEntry[]>;
+}
+
+export interface ITeamReportRepository {
+  listReports(): Promise<any[]>;
+}
+
+export interface IOptionOrderRepository {
+  listOrders(): Promise<DbOptionOrder[]>;
+}
+
+export interface INFTOrderRepository {
+  listOrders(): Promise<DbNFTOrder[]>;
+}
+
+export interface IMiningRecordRepository {
+  listRecords(): Promise<DbRewardRecord[]>;
+}
+
+

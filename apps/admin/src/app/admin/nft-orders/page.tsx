@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, WalletAddressCell, TransactionHashCell, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,14 +10,40 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
-import { mockNFTOrders, MockNFTOrder } from '../../../mocks/db';
+import { nftOrderRepository } from '../../../repositories';
+import { MockNFTOrder } from '../../../mocks/db';
 
 export default function NFTOrdersPage() {
+  const [orders, setOrders] = useState<MockNFTOrder[]>([]);
   const [contractFilter, setContractFilter] = useState('');
   const [tokenIdFilter, setTokenIdFilter] = useState('');
   const [addressFilter, setAddressFilter] = useState('');
   const [userIdFilter, setUserIdFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    nftOrderRepository.listOrders().then((ords) => {
+      setOrders(
+        ords.map((n) => ({
+          id: n.orderId,
+          userId: n.userUid,
+          userAddress: n.walletAddress,
+          contractAddress: n.contractAddress,
+          contractName: 'BSP VIP NFT',
+          tokenId: n.tokenId,
+          orderNumber: n.orderNumber,
+          nftName: n.nftName,
+          picture: n.imageUrl || '/nft-placeholder.png',
+          price: n.priceBaseUnits,
+          totalPrice: n.totalBaseUnits,
+          txHash: n.transactionHash,
+          status: n.status,
+          createdAt: n.createdAt,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     contract: '',
@@ -85,7 +111,7 @@ export default function NFTOrdersPage() {
     }
   };
 
-  const filtered = mockNFTOrders
+  const filtered = orders
     .filter((o) => {
       const f = appliedFilters;
       const matchesContract = f.contract ? o.contractName.toLowerCase().includes(f.contract.toLowerCase()) : true;

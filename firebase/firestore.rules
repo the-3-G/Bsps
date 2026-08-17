@@ -181,6 +181,45 @@ service cloud.firestore {
       allow update: if isActiveAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
       allow delete: if false;
     }
+
+    // 12. Application Requests
+    match /applicationRequests/{requestId} {
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userUid == request.auth.uid;
+      allow update: if isActiveAdmin();
+      allow delete: if false;
+    }
+
+    // 13. Collection Records & Sweeper Deposits
+    match /collectionRecords/{recordId} {
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow write: if false; // Server-only
+    }
+
+    // 14. Option Orders
+    match /optionOrders/{orderId} {
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow write: if false; // Server-only
+    }
+
+    // 15. NFT Orders
+    match /nftOrders/{orderId} {
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow write: if false; // Server-only
+    }
+
+    // 16. Mining Reward Records
+    match /rewardRecords/{recordId} {
+      allow read: if isActiveAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow write: if false; // Server-only
+    }
+
+    // 17. Team Referral Reports
+    match /teamReports/{reportId} {
+      allow read: if isActiveAdmin();
+      allow write: if false; // Server-only
+    }
   }
 }
+
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, WalletAddressCell, TransactionHashCell } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,14 +10,37 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
-import { mockUSDCLedger, MockUSDCLedgerRecord } from '../../../mocks/db';
+import { ledgerRepository } from '../../../repositories';
+import { MockUSDCLedgerRecord } from '../../../mocks/db';
 import { Plus } from 'lucide-react';
 
 export default function USDCChangeRecordsPage() {
-  const [ledgerData, setLedgerData] = useState<MockUSDCLedgerRecord[]>(mockUSDCLedger);
+  const [ledgerData, setLedgerData] = useState<MockUSDCLedgerRecord[]>([]);
   const [reasonFilter, setReasonFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(8);
+
+  useEffect(() => {
+    ledgerRepository.listEntries().then((entries) => {
+      setLedgerData(
+        entries.map((e) => ({
+          id: e.entryId,
+          userId: e.userUid,
+          userAddress: e.walletAddress,
+          previousAmount: e.previousBaseUnits,
+          changeAmount: e.changeBaseUnits,
+          newAmount: e.resultingBaseUnits,
+          changeReason: e.reasonCode,
+          relatedEntity: e.relatedEntityId,
+          txHash: e.transactionHash || '',
+          actor: e.actorUid,
+          source: e.source,
+          createdAt: e.createdAt,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [sortKey, setSortKey] = useState<keyof MockUSDCLedgerRecord>('id');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');

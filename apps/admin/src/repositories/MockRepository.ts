@@ -4,15 +4,38 @@ import {
   IPledgeRepository,
   ILoanRepository,
   ILoginEventRepository,
+  IApplicationRepository,
+  ICollectionRecordRepository,
+  ILedgerRepository,
+  ITeamReportRepository,
+  IOptionOrderRepository,
+  INFTOrderRepository,
+  IMiningRecordRepository,
   DbUser,
   DbWithdrawalRequest,
   DbPledge,
   DbLoanRequest,
   DbLoginEvent,
+  DbApplicationRequest,
+  DbCollectionRecord,
+  DbLedgerEntry,
+  DbOptionOrder,
+  DbNFTOrder,
+  DbRewardRecord,
 } from '@bspc/types';
-import { mockUsers, mockWithdrawals, mockPledges, mockLoans, mockLoginRecords } from '../mocks/db';
-
-
+import {
+  mockUsers,
+  mockWithdrawals,
+  mockPledges,
+  mockLoans,
+  mockLoginRecords,
+  mockCollectionRecords,
+  mockUSDCLedger,
+  mockTeamReports,
+  mockOptionOrders,
+  mockNFTOrders,
+  mockMiningRecords,
+} from '../mocks/db';
 
 function isHiddenUser(user: any): boolean {
   if (!user) return false;
@@ -74,10 +97,7 @@ export class MockUserRepository implements IUserRepository {
   async updateUserStatus(uid: string, status: DbUser['status']): Promise<void> {
     const idx = mockUsers.findIndex((u) => u.id === uid);
     if (idx !== -1) {
-      mockUsers[idx] = {
-        ...mockUsers[idx],
-        status,
-      };
+      mockUsers[idx].status = status;
     }
   }
 }
@@ -93,7 +113,7 @@ export class MockWithdrawalRepository implements IWithdrawalRepository {
       tokenAddress: '0x0000000000000000000000000000000000000000',
       amountBaseUnits: w.amount,
       feeBaseUnits: w.handlingFee,
-      status: w.status,
+      status: w.status as 'pending' | 'approved' | 'rejected',
       reviewReason: w.reviewReason,
       reviewedBy: w.reviewer,
       reviewedAt: w.reviewTime,
@@ -219,4 +239,138 @@ export class MockLoginEventRepository implements ILoginEventRepository {
   }
 }
 
+export class MockApplicationRepository implements IApplicationRepository {
+  async listRequests(): Promise<DbApplicationRequest[]> {
+    return Array.from({ length: 10 }, (_, i) => ({
+      requestId: `req-${i + 1}`,
+      userUid: `u-${(i % 5) + 1}`,
+      walletAddress: `0x${(100 + i).toString(16).padStart(40, '0')}`,
+      amountBaseUnits: `${1000 * (i + 1)} USDC`,
+      requestType: i % 2 === 0 ? 'VIP-Group' : 'Normal-Group',
+      status: i % 3 === 0 ? 'approved' : i % 4 === 0 ? 'rejected' : 'pending',
+      reviewReason: i % 4 === 0 ? 'Verification of deposits failed' : undefined,
+      reviewedBy: i % 3 === 0 || i % 4 === 0 ? `admin_${(i % 2) + 1}` : undefined,
+      reviewedAt: i % 3 === 0 || i % 4 === 0 ? new Date(2026, 7, 6 + i).toISOString() : undefined,
+      submittedAt: new Date(2026, 7, 5 + i).toISOString(),
+      updatedAt: new Date(2026, 7, 5 + i).toISOString(),
+    }));
+  }
 
+  async reviewRequest(requestId: string, status: DbApplicationRequest['status'], reason?: string): Promise<void> {
+    // Mock review update
+  }
+}
+
+export class MockCollectionRecordRepository implements ICollectionRecordRepository {
+  async listRecords(): Promise<DbCollectionRecord[]> {
+    return mockCollectionRecords.map((r) => ({
+      recordId: r.id,
+      userUid: r.userId,
+      senderAddress: r.sender,
+      recipientAddress: r.recipient,
+      chainId: 1,
+      tokenAddress: r.token,
+      amountBaseUnits: r.amount,
+      transactionHash: r.txHash,
+      logIndex: 0,
+      blockNumber: r.blockNumber,
+      confirmationCount: r.confirmations,
+      status: r.status,
+      createdAt: r.createdAt,
+    }));
+  }
+}
+
+export class MockLedgerRepository implements ILedgerRepository {
+  async listEntries(limitCount?: number): Promise<DbLedgerEntry[]> {
+    const slice = limitCount ? mockUSDCLedger.slice(0, limitCount) : mockUSDCLedger;
+    return slice.map((l) => ({
+      entryId: l.id,
+      userUid: l.userId,
+      walletAddress: l.userAddress,
+      assetId: 'USDC',
+      previousBaseUnits: l.previousAmount,
+      changeBaseUnits: l.changeAmount,
+      resultingBaseUnits: l.newAmount,
+      reasonCode: l.changeReason,
+      relatedEntityType: 'system',
+      relatedEntityId: l.relatedEntity,
+      transactionHash: l.txHash,
+      source: l.source,
+      actorUid: l.actor,
+      createdAt: l.createdAt,
+    }));
+  }
+}
+
+export class MockTeamReportRepository implements ITeamReportRepository {
+  async listReports(): Promise<any[]> {
+    return mockTeamReports;
+  }
+}
+
+export class MockOptionOrderRepository implements IOptionOrderRepository {
+  async listOrders(): Promise<DbOptionOrder[]> {
+    return mockOptionOrders.map((o) => ({
+      orderId: o.id,
+      userUid: o.userId,
+      walletAddress: o.userAddress,
+      orderNumber: o.orderNumber,
+      pair: o.pair,
+      direction: o.direction,
+      principalBaseUnits: o.principal,
+      feeBaseUnits: o.fee,
+      entryPrice: o.entryPrice,
+      settlementPrice: o.settlementPrice,
+      startAt: o.startTime,
+      endAt: o.endTime,
+      status: o.status,
+      environment: (o.env === 'test' ? 'demo' : o.env) as 'production' | 'demo',
+
+      createdAt: o.startTime,
+      updatedAt: o.endTime,
+    }));
+  }
+}
+
+export class MockNFTOrderRepository implements INFTOrderRepository {
+  async listOrders(): Promise<DbNFTOrder[]> {
+    return mockNFTOrders.map((n) => ({
+      orderId: n.id,
+      userUid: n.userId,
+      walletAddress: n.userAddress,
+      chainId: 1,
+      contractAddress: n.contractAddress,
+      tokenId: n.tokenId,
+      orderNumber: n.orderNumber,
+      nftName: n.nftName,
+      imageUrl: n.picture,
+      paymentTokenAddress: '0x0000000000000000000000000000000000000000',
+      priceBaseUnits: n.price,
+      totalBaseUnits: n.totalPrice,
+      transactionHash: n.txHash,
+      status: n.status,
+      createdAt: n.createdAt,
+      updatedAt: n.createdAt,
+    }));
+  }
+}
+
+export class MockMiningRecordRepository implements IMiningRecordRepository {
+  async listRecords(): Promise<DbRewardRecord[]> {
+    return mockMiningRecords.map((m) => ({
+      recordId: m.id,
+      userUid: m.userId,
+      walletAddress: m.userAddress,
+      chainId: 1,
+      tokenAddress: '0x0000000000000000000000000000000000000000',
+      amountBaseUnits: m.rewardAmount,
+      transactionHash: m.txHash,
+      logIndex: 0,
+      blockNumber: 18000000,
+      recordType: m.recordType,
+      verificationStatus: m.verificationState === 'on-chain verified' ? 'verified' : 'pending',
+      createdAt: m.createdAt,
+    }));
+  }
+}

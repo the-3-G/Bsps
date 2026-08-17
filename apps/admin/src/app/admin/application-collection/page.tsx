@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Landmark, ArrowRight } from 'lucide-react';
-
 import { PageHeader, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -13,6 +12,7 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
+import { applicationRepository } from '../../../repositories';
 
 
 interface ApplicationRequest {
@@ -30,25 +30,33 @@ interface ApplicationRequest {
   reviewTime?: string;
 }
 
-const mockRequests: ApplicationRequest[] = Array.from({ length: 10 }, (_, i) => ({
-  id: `req-${i + 1}`,
-  submissionTime: new Date(2026, 7, 5 + i).toISOString(),
-  userId: `u-${(i % 5) + 1}`,
-  username: `user_${(i % 5) + 1}`,
-  userAddress: `0x${(100 + i).toString(16).padStart(40, '0')}`,
-  group: i % 2 === 0 ? 'VIP-Group' : 'Normal-Group',
-  handler: `operator_${(i % 3) + 1}`,
-  amount: `${1000 * (i + 1)} USDC`,
-  status: i % 3 === 0 ? 'approved' : i % 4 === 0 ? 'rejected' : 'pending',
-  reviewReason: i % 4 === 0 ? 'Verification of deposits failed' : undefined,
-  reviewer: i % 3 === 0 || i % 4 === 0 ? `admin_${(i % 2) + 1}` : undefined,
-  reviewTime: i % 3 === 0 || i % 4 === 0 ? new Date(2026, 7, 6 + i).toISOString() : undefined,
-}));
-
 export default function ApplicationCollectionPage() {
+  const [requests, setRequests] = useState<ApplicationRequest[]>([]);
   const [usernameFilter, setUsernameFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    applicationRepository.listRequests().then((reqs) => {
+      setRequests(
+        reqs.map((r) => ({
+          id: r.requestId,
+          submissionTime: r.submittedAt,
+          userId: r.userUid,
+          username: r.walletAddress ? `${r.walletAddress.slice(0, 6)}...${r.walletAddress.slice(-4)}` : r.userUid,
+          userAddress: r.walletAddress,
+          group: r.requestType || 'Standard',
+          handler: r.reviewedBy || 'system',
+          amount: r.amountBaseUnits,
+          status: r.status,
+          reviewReason: r.reviewReason,
+          reviewer: r.reviewedBy,
+          reviewTime: r.reviewedAt,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     username: '',
@@ -108,7 +116,7 @@ export default function ApplicationCollectionPage() {
     }
   };
 
-  const filtered = mockRequests
+  const filtered = requests
     .filter((r) => {
       const f = appliedFilters;
       const matchesUsername = f.username ? r.username.toLowerCase().includes(f.username.toLowerCase()) : true;

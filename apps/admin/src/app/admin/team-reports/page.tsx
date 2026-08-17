@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, WalletAddressCell } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -11,13 +11,22 @@ import {
   SortHeader,
   DetailDrawer,
 } from '../../../components/ui/DataTable';
-import { mockTeamReports, MockTeamReportRow } from '../../../mocks/db';
+import { teamReportRepository } from '../../../repositories';
+import { MockTeamReportRow } from '../../../mocks/db';
 import { Users } from 'lucide-react';
 
 export default function TeamReportsPage() {
+  const [reports, setReports] = useState<MockTeamReportRow[]>([]);
   const [leaderIdFilter, setLeaderIdFilter] = useState('');
   const [usernameFilter, setUsernameFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
+
+  useEffect(() => {
+    teamReportRepository.listReports().then((reps) => {
+      setReports(reps);
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     leaderId: '',
@@ -76,7 +85,7 @@ export default function TeamReportsPage() {
     }
   };
 
-  const filtered = mockTeamReports
+  const filtered = reports
     .filter((r) => {
       const f = appliedFilters;
       const matchesLeaderId = f.leaderId ? r.leaderId.toLowerCase().includes(f.leaderId.toLowerCase()) : true;

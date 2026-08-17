@@ -243,6 +243,43 @@ export const mockCollections: MockCollectionRecord[] = Array.from({ length: 20 }
   createdAt: new Date(2026, 7, 12 + (i % 3)).toISOString(),
 }));
 
+export const mockCollectionRecords = mockCollections;
+
+export interface MockOptionOrder {
+  id: string;
+  orderNumber: string;
+  userId: string;
+  userAddress: string;
+  pair: string;
+  direction: 'UP' | 'DOWN';
+  principal: string;
+  fee: string;
+  entryPrice: string;
+  settlementPrice: string;
+  startTime: string;
+  endTime: string;
+  status: 'win' | 'lose' | 'pending';
+  env: 'production' | 'test';
+}
+
+export const mockOptionOrders: MockOptionOrder[] = Array.from({ length: 15 }, (_, i) => ({
+  id: `opt-${i + 1}`,
+  orderNumber: `OPT-ORD-${2000 + i}`,
+  userId: `u-${(i % 5) + 1}`,
+  userAddress: generateAddress(100 + (i % 25)),
+  pair: 'BTC/USDT',
+  direction: i % 2 === 0 ? 'UP' : 'DOWN',
+  principal: `${100 * (i + 1)} USDT`,
+  fee: `${(1.5 * (i + 1)).toFixed(2)} USDT`,
+  entryPrice: (60000 + i * 150).toFixed(2),
+  settlementPrice: (i % 3 === 0 ? 60500 + i * 150 : 59500 + i * 150).toFixed(2),
+  startTime: new Date(2026, 7, 10 + i).toISOString(),
+  endTime: new Date(2026, 7, 10 + i, 12, 5).toISOString(),
+  status: i % 3 === 0 ? 'win' : i % 3 === 1 ? 'lose' : 'pending',
+  env: 'production',
+}));
+
+
 export const mockNFTOrders: MockNFTOrder[] = Array.from({ length: 8 }, (_, i) => ({
   id: `n-${i + 1}`,
   orderNumber: `NFT-ORD-${3000 + i}`,
