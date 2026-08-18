@@ -275,12 +275,12 @@ function FloatingActions({
     <div
       style={{
         position: 'fixed',
-        right: 14,
-        bottom: 'calc(18px + env(safe-area-inset-bottom))',
+        right: 16,
+        bottom: 'calc(20px + env(safe-area-inset-bottom))',
         zIndex: 40,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 10,
         alignItems: 'flex-end',
       }}
     >
@@ -290,8 +290,8 @@ function FloatingActions({
         aria-label="Daily Check-In"
         title="Check-In"
         style={{
-          width: 54,
-          height: 54,
+          width: 46,
+          height: 46,
           borderRadius: '50%',
           background: 'linear-gradient(135deg,#FFD34D 0%,#C9A227 100%)',
           color: '#00152B',
@@ -303,11 +303,11 @@ function FloatingActions({
           justifyContent: 'center',
           flexDirection: 'column',
           gap: 1,
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: 800,
         }}
       >
-        <span style={{ fontSize: 16, lineHeight: 1 }}>✓</span>
+        <span style={{ fontSize: 14, lineHeight: 1 }}>✓</span>
         <span>CHECK</span>
       </button>
 
@@ -317,8 +317,8 @@ function FloatingActions({
         aria-label="Customer Service Chat"
         onClick={onOpenChat}
         style={{
-          width: 54,
-          height: 54,
+          width: 46,
+          height: 46,
           borderRadius: '50%',
           background: 'linear-gradient(135deg,#0A213B 0%,#032C5C 100%)',
           border: '1.5px solid #FFD34D',
@@ -330,7 +330,7 @@ function FloatingActions({
           position: 'relative',
         }}
       >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFD34D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD34D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
         {hasUnreadChat && (

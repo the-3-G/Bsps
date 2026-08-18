@@ -257,10 +257,11 @@ export function HomeHero() {
         <p
           style={{
             color: '#A7B0BE',
-            fontSize: 'clamp(17px, 4.2vw, 19px)',
+            fontSize: 'clamp(16px, 4vw, 18px)',
             lineHeight: 1.5,
             margin: '0 0 24px',
-            maxWidth: 350,
+            maxWidth: 310,
+            paddingRight: 16,
             fontWeight: 400,
           }}
         >
