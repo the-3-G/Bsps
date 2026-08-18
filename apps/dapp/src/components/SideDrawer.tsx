@@ -84,44 +84,44 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
       >
         {/* Top BSP Mark */}
         <div style={{
-          padding: '48px 24px 32px',
+          padding: '32px 20px 20px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 12,
+          gap: 8,
           borderBottom: '1px solid rgba(255,211,77,0.1)',
         }}>
           <div style={{
-            width: 80,
-            height: 80,
+            width: 56,
+            height: 56,
             borderRadius: '50%',
             background: 'linear-gradient(135deg,#FFD34D 0%,#C9A227 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 900,
-            fontSize: 22,
+            fontSize: 18,
             color: '#00152B',
             letterSpacing: '-0.02em',
-            boxShadow: '0 4px 24px rgba(255,211,77,0.35)',
+            boxShadow: '0 4px 20px rgba(255,211,77,0.25)',
           }}>
             BSP
           </div>
           <span style={{
             fontWeight: 900,
-            fontSize: 28,
+            fontSize: 22,
             color: '#FFD34D',
             letterSpacing: '-0.02em',
           }}>
             BSP
           </span>
-          <span style={{ color: '#8F98A6', fontSize: 13, fontWeight: 500 }}>
+          <span style={{ color: '#8F98A6', fontSize: 12, fontWeight: 500 }}>
             Blockchain Savings Portal
           </span>
         </div>
 
         {/* Menu Items */}
-        <nav style={{ flex: 1, padding: '16px 12px' }}>
+        <nav style={{ flex: 1, padding: '12px 12px' }}>
           {MENU_ITEMS.map((item, i) => {
             const Icon = item.icon;
             return (
@@ -132,13 +132,13 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 16,
-                  padding: '18px 16px',
-                  borderRadius: 16,
+                  gap: 12,
+                  padding: '12px 14px',
+                  borderRadius: 12,
                   textDecoration: 'none',
                   color: '#FFFFFF',
-                  fontSize: 18,
-                  fontWeight: 700,
+                  fontSize: 15,
+                  fontWeight: 600,
                   marginBottom: 4,
                   background: 'transparent',
                   transition: 'background 0.2s, color 0.2s',
@@ -155,9 +155,9 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
               >
                 {/* Icon area */}
                 <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 14,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
                   background: 'rgba(255,211,77,0.07)',
                   border: '1px solid rgba(255,211,77,0.12)',
                   display: 'flex',
@@ -165,10 +165,10 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
                   justifyContent: 'center',
                   flexShrink: 0,
                 }}>
-                  <Icon size={22} color="#FFD34D" />
+                  <Icon size={18} color="#FFD34D" />
                 </div>
                 <span style={{ flex: 1 }}>{item.label}</span>
-                <ChevronRight size={18} color="rgba(255,255,255,0.3)" />
+                <ChevronRight size={16} color="rgba(255,255,255,0.3)" />
               </Link>
             );
           })}
@@ -187,9 +187,9 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
                 width: '100%',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 16,
-                padding: '18px 16px',
-                borderRadius: 16,
+                gap: 12,
+                padding: '12px 14px',
+                borderRadius: 12,
                 border: 'none',
                 cursor: 'pointer',
                 background: 'linear-gradient(135deg,rgba(255,211,77,0.12),rgba(255,211,77,0.06))',
@@ -198,9 +198,9 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
               }}
             >
               <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
+                width: 36,
+                height: 36,
+                borderRadius: 10,
                 background: 'rgba(255,211,77,0.15)',
                 border: '1px solid rgba(255,211,77,0.3)',
                 display: 'flex',
@@ -208,12 +208,12 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
                 justifyContent: 'center',
                 flexShrink: 0,
               }}>
-                <UserCheck size={22} color="#FFD34D" />
+                <UserCheck size={18} color="#FFD34D" />
               </div>
-              <span style={{ flex: 1, color: '#FFD34D', fontSize: 18, fontWeight: 800 }}>
+              <span style={{ flex: 1, color: '#FFD34D', fontSize: 15, fontWeight: 700 }}>
                 Account Login
               </span>
-              <ChevronRight size={18} color="#FFD34D" />
+              <ChevronRight size={16} color="#FFD34D" />
             </button>
           ) : (
             <button
@@ -222,9 +222,9 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
                 width: '100%',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 16,
-                padding: '18px 16px',
-                borderRadius: 16,
+                gap: 12,
+                padding: '12px 14px',
+                borderRadius: 12,
                 border: '1px solid rgba(255,211,77,0.3)',
                 cursor: 'pointer',
                 background: 'rgba(255,211,77,0.06)',
@@ -232,21 +232,21 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
               }}
             >
               <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
+                width: 36,
+                height: 36,
+                borderRadius: 10,
                 background: 'rgba(255,211,77,0.12)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}>
-                <MessageSquare size={22} color="#FFD34D" />
+                <MessageSquare size={18} color="#FFD34D" />
               </div>
-              <span style={{ flex: 1, color: '#FFD34D', fontSize: 18, fontWeight: 800 }}>
+              <span style={{ flex: 1, color: '#FFD34D', fontSize: 15, fontWeight: 700 }}>
                 Customer Service
               </span>
-              <ChevronRight size={18} color="#FFD34D" />
+              <ChevronRight size={16} color="#FFD34D" />
             </button>
           )}
         </nav>

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './globals.css';
 import { Web3Provider } from '../context/Web3Context';
-import { LayoutDashboard, Wallet, Layers, Users, Landmark, Share2 } from 'lucide-react';
+import { LayoutDashboard, Wallet, Layers, Users, Landmark, Share2, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { CustomerServiceModal } from '../components/CustomerServiceModal';
@@ -15,8 +15,18 @@ import { useWeb3 } from '../context/Web3Context';
 // Routes that show the authenticated bottom navigation
 const AUTH_ROUTES = ['/dashboard', '/assets', '/pledges', '/referrals', '/withdraw'];
 
+const HEADER_NAV_ITEMS = [
+  { label: 'Home',      href: '/' },
+  { label: 'NFT',       href: '/assets' },
+  { label: 'Trading',   href: '/dashboard' },
+  { label: 'Pool Data', href: '/pledges' },
+  { label: 'Loan',      href: '/loan' },
+  { label: 'Paper',     href: '/referrals' },
+];
+
 function DAppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { connectWallet, isConnected, address } = useWeb3();
   const [headerState, setHeaderState] = useState<'guest' | 'voucher_requested'>('guest');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,51 +79,81 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
           position: 'sticky',
           top: 0,
           zIndex: 50,
-          height: '86px',
+          height: '64px',
           paddingTop: 'env(safe-area-inset-top)',
-          background: '#00172E',
+          background: scrolled ? 'rgba(0, 23, 46, 0.96)' : 'rgba(0, 23, 46, 0.88)',
+          backdropFilter: 'blur(12px)',
           borderBottom: '1px solid rgba(255,211,77,0.15)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 16px',
+          padding: '0 20px',
           transition: 'background 0.3s, border-color 0.3s',
         }}
       >
         {/* Left Group: Hamburger + BSP wordmark */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <button
             id="menu-open-btn"
             onClick={() => setIsSideDrawerOpen(true)}
             aria-label="Open menu"
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: '50%',
-              background: 'rgba(3,44,92,0.6)',
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: 'rgba(255,211,77,0.06)',
               border: '1px solid rgba(255,211,77,0.25)',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 4.5,
               cursor: 'pointer',
               flexShrink: 0,
+              transition: 'background 0.2s',
             }}
           >
-            <span style={{ display: 'block', width: 18, height: 2, background: '#FFD34D', borderRadius: 2 }} />
-            <span style={{ display: 'block', width: 13, height: 2, background: '#FFD34D', borderRadius: 2, alignSelf: 'flex-start', marginLeft: 3 }} />
-            <span style={{ display: 'block', width: 18, height: 2, background: '#FFD34D', borderRadius: 2 }} />
+            <Menu size={20} color="#FFD34D" />
           </button>
 
-          <span style={{
-            fontWeight: 800,
-            fontSize: 32,
-            color: '#FFD34D',
-            letterSpacing: '-0.03em',
-            lineHeight: 1,
-          }}>BSP</span>
+          <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+            <span style={{
+              fontWeight: 900,
+              fontSize: 22,
+              color: '#FFD34D',
+              letterSpacing: '-0.02em',
+              lineHeight: 1,
+            }}>BSP</span>
+          </Link>
         </div>
+
+        {/* Center Group: Desktop Navigation Links */}
+        <nav
+          className="hidden md:flex"
+          style={{
+            alignItems: 'center',
+            gap: 24,
+          }}
+        >
+          {HEADER_NAV_ITEMS.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                style={{
+                  textDecoration: 'none',
+                  fontSize: 14,
+                  fontWeight: active ? 700 : 500,
+                  color: active ? '#FFD34D' : '#8F98A6',
+                  transition: 'color 0.2s',
+                  padding: '6px 0',
+                  borderBottom: active ? '2px solid #FFD34D' : '2px solid transparent',
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
         {/* Right Group: Share + Login/Voucher */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -121,11 +161,11 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
             id="share-btn"
             aria-label="Share"
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 11,
+              width: 38,
+              height: 38,
+              borderRadius: 10,
               background: 'rgba(255,211,77,0.06)',
-              border: '1px solid rgba(255,211,77,0.35)',
+              border: '1px solid rgba(255,211,77,0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -140,10 +180,10 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
             id="header-action-btn"
             onClick={handleHeaderButtonClick}
             style={{
-              height: 44,
+              height: 38,
               padding: '0 16px',
               borderRadius: 10,
-              background: '#FFD34D',
+              background: 'linear-gradient(135deg, #FFD34D 0%, #E6C45F 100%)',
               color: '#00172E',
               fontWeight: 800,
               fontSize: 13,
