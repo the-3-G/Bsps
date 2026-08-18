@@ -41,68 +41,119 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isAgentTyping]);
 
-  // Auth and Conversation Initialization
-  useEffect(() => {
-    if (!isOpen) return;
-
+  // Auth and Conversation Initialization helper
+  const initSession = async () => {
     const auth = getFirebaseAuth();
     const db = getFirebaseFirestore();
     const functions = getFirebaseFunctions();
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      let currentUser = user;
-      if (!user) {
-        setIsCreating(true);
+    setIsCreating(true);
+    setErrorMessage(null);
+
+    let currentUser = auth.currentUser;
+    if (!currentUser) {
+      try {
+        const res = await signInAnonymously(auth);
+        currentUser = res.user;
+      } catch (err: any) {
+        console.error('Anonymous sign-in failed:', err);
+        setErrorMessage('Could not establish a secure support session. Please try again.');
+        setIsCreating(false);
+        return null;
+      }
+    }
+
+    if (currentUser) {
+      setUserUid(currentUser.uid);
+      const shortCode = currentUser.uid.slice(-4).toUpperCase();
+      setGuestLabel(`Guest ${shortCode}`);
+
+      // Try to retrieve and verify stored conversation ID
+      const storedConvId = localStorage.getItem('bspc_support_conversation_id');
+      let validConvId = null;
+
+      if (storedConvId) {
         try {
-          const res = await signInAnonymously(auth);
-          currentUser = res.user;
-        } catch (err: any) {
-          console.error('Anonymous sign-in failed:', err);
-          setErrorMessage('Could not establish a secure support session. Please try again.');
-          setIsCreating(false);
-          return;
+          const convDocRef = doc(db, 'chatConversations', storedConvId);
+          const convSnap = await getDoc(convDocRef);
+          if (convSnap.exists()) {
+            const data = convSnap.data();
+            // Verify ownership
+            if (data.guestId === currentUser.uid || data.authenticatedUid === currentUser.uid) {
+              validConvId = storedConvId;
+              setStatus(data.status);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to verify stored conversation ID:', e);
         }
       }
 
-      if (currentUser) {
-        setUserUid(currentUser.uid);
-        const shortCode = currentUser.uid.slice(-4).toUpperCase();
-        setGuestLabel(`Guest ${shortCode}`);
+      if (validConvId) {
+        setConversationId(validConvId);
+        setIsCreating(false);
+        return validConvId;
+      } else {
+        // Clear stale state
+        localStorage.removeItem('bspc_support_conversation_id');
 
-        // Try to retrieve and verify stored conversation ID
-        const storedConvId = localStorage.getItem('bspc_support_conversation_id');
-        let validConvId = null;
+        const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
 
-        if (storedConvId) {
+        if (isSparkUat) {
           try {
-            const convDocRef = doc(db, 'chatConversations', storedConvId);
-            const convSnap = await getDoc(convDocRef);
-            if (convSnap.exists()) {
-              const data = convSnap.data();
-              // Verify ownership
-              if (data.guestId === currentUser.uid || data.authenticatedUid === currentUser.uid) {
-                validConvId = storedConvId;
-                setStatus(data.status);
-              }
-            }
-          } catch (e) {
-            console.warn('Failed to verify stored conversation ID:', e);
+            const newConvRef = doc(collection(db, 'chatConversations'));
+            const newId = newConvRef.id;
+            const now = serverTimestamp();
+
+            await setDoc(newConvRef, {
+              guestId: currentUser.uid,
+              authenticatedUid: currentUser.uid,
+              guestLabel: `Guest ${shortCode}`,
+              status: 'waiting',
+              assignedAgentUid: null,
+              source: initialSource,
+              subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+              createdAt: now,
+              updatedAt: now,
+              lastMessageAt: now,
+              userUnreadCount: 0,
+              agentUnreadCount: 0,
+            });
+
+            localStorage.setItem('bspc_support_conversation_id', newId);
+            setConversationId(newId);
+            setStatus('waiting');
+            setIsCreating(false);
+            return newId;
+          } catch (err: any) {
+            console.error('Direct Firestore conversation creation failed:', err);
+            setErrorMessage('Failed to connect to customer support.');
+            setIsCreating(false);
+            return null;
           }
-        }
-
-        if (validConvId) {
-          setConversationId(validConvId);
-          setIsCreating(false);
         } else {
-          // Clear stale state
-          localStorage.removeItem('bspc_support_conversation_id');
-          setIsCreating(true);
-          setErrorMessage(null);
+          // Try Cloud Function first, fallback to direct Firestore if Functions unavailable
+          try {
+            const createConvFn = httpsCallable<{
+              subject?: string;
+              source: string;
+              initialMessage?: string;
+            }, { conversationId: string; guestLabel: string }>(functions, 'createSupportConversation');
 
-          const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+            const res = await createConvFn({
+              source: initialSource,
+              subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+              initialMessage: 'Hello. Please tell us how we can assist you with your voucher.',
+            });
 
-          if (isSparkUat) {
-            // Spark UAT Mode: Direct Firestore document creation under security rules
+            const newId = res.data.conversationId;
+            localStorage.setItem('bspc_support_conversation_id', newId);
+            setConversationId(newId);
+            setStatus('waiting');
+            setIsCreating(false);
+            return newId;
+          } catch (fnErr: any) {
+            console.warn('Cloud Functions unavailable. Falling back to Spark UAT Firestore creation:', fnErr?.message || fnErr);
             try {
               const newConvRef = doc(collection(db, 'chatConversations'));
               const newId = newConvRef.id;
@@ -126,70 +177,36 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
               localStorage.setItem('bspc_support_conversation_id', newId);
               setConversationId(newId);
               setStatus('waiting');
-            } catch (err: any) {
-              console.error('Direct Firestore conversation creation failed:', err);
-              setErrorMessage('Failed to connect to customer support.');
-            } finally {
               setIsCreating(false);
-            }
-          } else {
-            // Try Cloud Function first, fallback to direct Firestore if Functions unavailable
-            try {
-              const createConvFn = httpsCallable<{
-                subject?: string;
-                source: string;
-                initialMessage?: string;
-              }, { conversationId: string; guestLabel: string }>(functions, 'createSupportConversation');
-
-              const res = await createConvFn({
-                source: initialSource,
-                subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
-                initialMessage: 'Hello. Please tell us how we can assist you with your voucher.',
-              });
-
-              const newId = res.data.conversationId;
-              localStorage.setItem('bspc_support_conversation_id', newId);
-              setConversationId(newId);
-              setStatus('waiting');
-            } catch (fnErr: any) {
-              console.warn('Cloud Functions unavailable. Falling back to Spark UAT Firestore creation:', fnErr?.message || fnErr);
-              try {
-                const newConvRef = doc(collection(db, 'chatConversations'));
-                const newId = newConvRef.id;
-                const now = serverTimestamp();
-
-                await setDoc(newConvRef, {
-                  guestId: currentUser.uid,
-                  authenticatedUid: currentUser.uid,
-                  guestLabel: `Guest ${shortCode}`,
-                  status: 'waiting',
-                  assignedAgentUid: null,
-                  source: initialSource,
-                  subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
-                  createdAt: now,
-                  updatedAt: now,
-                  lastMessageAt: now,
-                  userUnreadCount: 0,
-                  agentUnreadCount: 0,
-                });
-
-                localStorage.setItem('bspc_support_conversation_id', newId);
-                setConversationId(newId);
-                setStatus('waiting');
-              } catch (fsErr: any) {
-                console.error('Spark UAT Firestore fallback conversation creation failed:', fsErr);
-                setErrorMessage(fsErr?.message || 'Failed to connect to customer support.');
-              }
-            } finally {
+              return newId;
+            } catch (fsErr: any) {
+              console.error('Spark UAT Firestore fallback conversation creation failed:', fsErr);
+              setErrorMessage(fsErr?.message || 'Failed to connect to customer support.');
               setIsCreating(false);
+              return null;
             }
           }
         }
       }
+    }
+    setIsCreating(false);
+    return null;
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const auth = getFirebaseAuth();
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      initSession();
     });
 
-    return () => unsubscribeAuth();
-  }, [isOpen, initialSource]);
+    return () => {
+      unsubscribeAuth();
+    };
+  }, [isOpen]);
+
+
 
   // Real-time Firestore Subscriptions (Conversation status and Messages)
   useEffect(() => {
@@ -262,9 +279,19 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
+
     e.preventDefault();
     const cleanText = inputText.trim();
-    if (!cleanText || !conversationId) return;
+    if (!cleanText) return;
+
+    let activeConvId = conversationId;
+    if (!activeConvId) {
+      activeConvId = await initSession();
+      if (!activeConvId) {
+        setErrorMessage('Could not establish a secure support session. Please tap retry above.');
+        return;
+      }
+    }
 
     if (status === 'closed' || status === 'blocked') {
       setErrorMessage('This support conversation has been closed or blocked.');
@@ -283,14 +310,14 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     // Cancel typing indicator
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     const db = getFirebaseFirestore();
-    const convDocRef = doc(db, 'chatConversations', conversationId);
+    const convDocRef = doc(db, 'chatConversations', activeConvId);
     updateDoc(convDocRef, { guestTyping: false }).catch(() => {});
 
     try {
-      const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
+      const msgsRef = collection(db, 'chatConversations', activeConvId, 'messages');
       // Direct Firestore message write
       await addDoc(msgsRef, {
-        conversationId,
+        conversationId: activeConvId,
         senderType: 'guest',
         senderUid: userUid || 'unknown',
         messageType: 'text',
@@ -309,7 +336,6 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
       console.error('Failed to send message:', err);
       setErrorMessage('Failed to send message. Please verify authorization.');
     }
-
   };
 
   if (!isOpen) return null;
@@ -318,15 +344,15 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     <div className="fixed inset-0 z-55 flex justify-center bg-black/80 backdrop-blur-sm">
       <div className="w-full max-w-md bg-slate-950 flex flex-col h-full border-x border-slate-800 shadow-2xl relative">
         {/* Chat Header */}
-        <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center sticky top-0 z-10">
+        <div className="flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+            <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20">
               <Headset className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-xs text-slate-100">BSP Support Center</span>
-                <span className="text-[9px] bg-slate-800 text-slate-400 font-mono px-1.5 py-0.5 rounded border border-slate-700">
+                <span className="font-bold text-sm text-slate-100">BSP Support Center</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-800 text-slate-300 rounded-full border border-slate-700">
                   {guestLabel}
                 </span>
               </div>
@@ -361,8 +387,15 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
           </div>
 
           {errorMessage && (
-            <div className="p-2.5 bg-red-950/20 border border-red-900/50 text-red-400 text-xs rounded-xl text-center">
-              {errorMessage}
+            <div className="p-3 bg-red-950/30 border border-red-900/60 text-red-300 text-xs rounded-xl text-center flex flex-col items-center gap-2 shadow-sm">
+              <span>{errorMessage}</span>
+              <button
+                type="button"
+                onClick={() => initSession()}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-all shadow-md active:scale-95"
+              >
+                Retry Session Connection
+              </button>
             </div>
           )}
 

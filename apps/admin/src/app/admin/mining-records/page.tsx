@@ -30,11 +30,13 @@ export default function MiningRecordsPage() {
           userAddress: m.walletAddress,
           rewardAmount: m.amountBaseUnits,
           ethAmount: '0.05 ETH',
-          recordType: m.recordType,
+          recordType: (m.recordType || 'Pledge Yield') as 'Pledge Yield' | 'Pool Distribution' | 'Node Referral',
+
           source: 'Staking Contract',
           txHash: m.transactionHash,
           createdAt: m.createdAt,
-          verificationState: m.verificationStatus === 'verified' ? 'on-chain verified' : 'pending',
+          verificationState: m.verificationStatus === 'verified' ? 'on-chain verified' : 'pending validation',
+
         }))
       );
     }).catch(console.error);
