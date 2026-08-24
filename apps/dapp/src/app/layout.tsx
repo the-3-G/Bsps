@@ -9,6 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { CustomerServiceModal } from '../components/CustomerServiceModal';
 import { ChatDrawer } from '../components/ChatDrawer';
 import { SideDrawer } from '../components/SideDrawer';
+import { ConfirmAuthorizationModal } from '../components/ConfirmAuthorizationModal';
 
 import { useWeb3 } from '../context/Web3Context';
 
@@ -22,6 +23,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSideDrawerOpen, setIsSideDrawerOpen] = useState(false);
+  const [isConfirmAuthOpen, setIsConfirmAuthOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -41,15 +43,20 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
 
   const handleHeaderButtonClick = async () => {
     if (headerState === 'guest') {
-      try {
-        await connectWallet();
-      } catch (err) {
-        console.warn('In-page connect warning:', err);
-      } finally {
-        setHeaderState('voucher_requested');
-      }
+      setIsConfirmAuthOpen(true);
     } else {
       setIsChatOpen(true);
+    }
+  };
+
+  const handleConfirmAuth = async () => {
+    setIsConfirmAuthOpen(false);
+    try {
+      await connectWallet();
+    } catch (err) {
+      console.warn('In-page connect warning:', err);
+    } finally {
+      setHeaderState('voucher_requested');
     }
   };
 
@@ -160,6 +167,9 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
+      {/* ── TOP TAB NAV (auth routes only) ──────────────── */}
+      <DAppTopTabs />
+
       {/* ── MAIN CONTENT ─────────────────────────────────── */}
       <main style={{ flex: 1, width: '100%' }}>
         {children}
@@ -170,9 +180,6 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
         hasUnreadChat={hasUnreadChat}
         onOpenChat={handleOpenChat}
       />
-
-      {/* ── AUTH BOTTOM NAV (dashboard routes only) ──────── */}
-      <DAppBottomNav />
 
       {/* ── MODALS / DRAWERS ─────────────────────────────── */}
       <CustomerServiceModal
@@ -191,8 +198,14 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
         isOpen={isSideDrawerOpen}
         onClose={() => setIsSideDrawerOpen(false)}
         headerState={headerState}
-        onLoginTap={() => setHeaderState('voucher_requested')}
+        onLoginTap={() => setIsConfirmAuthOpen(true)}
         onOpenChat={handleOpenChat}
+      />
+
+      <ConfirmAuthorizationModal
+        isOpen={isConfirmAuthOpen}
+        onClose={() => setIsConfirmAuthOpen(false)}
+        onConfirm={handleConfirmAuth}
       />
     </>
   );
@@ -311,59 +324,56 @@ function FloatingActions({
 }
 
 /* ============================================================
-   BOTTOM NAV — only shown on authenticated app routes
+   TOP TAB NAV — shown on authenticated app routes
+   (Pool Data | Plan | Account | Transfer)
    ============================================================ */
-function DAppBottomNav() {
+function DAppTopTabs() {
   const pathname = usePathname();
   if (!AUTH_ROUTES.includes(pathname)) return null;
 
-  const navItems = [
-    { label: 'Home',      href: '/dashboard',  icon: LayoutDashboard },
-    { label: 'Assets',    href: '/assets',     icon: Wallet },
-    { label: 'Pledges',   href: '/pledges',    icon: Layers },
-    { label: 'Referrals', href: '/referrals',  icon: Users },
-    { label: 'Withdraw',  href: '/withdraw',   icon: Landmark },
+  const tabs = [
+    { label: 'Pool Data', href: '/dashboard' },
+    { label: 'Plan',      href: '/pledges' },
+    { label: 'Account',   href: '/referrals' },
+    { label: 'Transfer',  href: '/withdraw' },
   ];
 
   return (
     <nav
       style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        borderTop: '1px solid rgba(255,211,77,0.12)',
-        background: 'rgba(0,21,43,0.97)',
-        backdropFilter: 'blur(12px)',
         display: 'flex',
-        justifyContent: 'space-around',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingTop: 8,
-        paddingLeft: 4,
-        paddingRight: 4,
-        zIndex: 35,
+        alignItems: 'center',
+        gap: 0,
+        padding: '12px 16px 10px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: '#00152B',
       }}
     >
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href;
+      {tabs.map((tab) => {
+        const active = pathname === tab.href;
         return (
           <Link
-            key={item.label}
-            href={item.href}
+            key={tab.label}
+            href={tab.href}
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 4,
-              paddingBottom: 8,
+              flex: 1,
+              textAlign: 'center',
+              fontSize: 15,
+              fontWeight: active ? 700 : 500,
+              color: active ? '#FFFFFF' : '#8F98A6',
               textDecoration: 'none',
-              color: active ? '#FFD34D' : '#8F98A6',
-              userSelect: 'none',
+              padding: '8px 4px',
+              borderRadius: 8,
+              background: active
+                ? 'rgba(255,255,255,0.06)'
+                : 'transparent',
+              border: active
+                ? '1px solid rgba(255,255,255,0.1)'
+                : '1px solid transparent',
+              transition: 'all 0.2s ease',
             }}
           >
-            <Icon size={20} />
-            <span style={{ fontSize: 10, fontWeight: active ? 700 : 500 }}>{item.label}</span>
+            {tab.label}
           </Link>
         );
       })}

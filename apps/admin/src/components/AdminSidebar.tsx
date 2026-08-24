@@ -73,6 +73,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       items: [
         { label: 'Users', path: '/admin/users', icon: <Users className="w-4 h-4" /> },
         { label: 'Customer Service', path: '/admin/customer-service', icon: <Headset className="w-4 h-4" /> },
+        { label: 'VIP Tiers Config', path: '/admin/vip-tiers', icon: <Award className="w-4 h-4" /> },
         { label: 'Pledge List', path: '/admin/pledges', icon: <Award className="w-4 h-4" /> },
         { label: 'Options Orders', path: '/admin/options-orders', icon: <TrendingUp className="w-4 h-4" /> },
         { label: 'Tax Collection', path: '/admin/tax-collection', icon: <Percent className="w-4 h-4" /> },
