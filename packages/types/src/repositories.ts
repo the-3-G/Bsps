@@ -195,6 +195,23 @@ export interface DbLedgerEntry {
   createdAt: string;
 }
 
+export interface DbLoanRequest {
+  loanId: string;
+  userUid: string;
+  walletAddress: string;
+  amountUsdt: string;
+  interestRate: string;
+  termDays: number;
+  collateralUsdt: string;
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'repaid' | 'overdue';
+  reviewReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  repaidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DbAdminAuditLog {
   logId: string;
   actorUid: string;
@@ -226,6 +243,44 @@ export interface IPledgeRepository {
   listPledges(): Promise<DbPledge[]>;
 }
 
+export interface ILoanRepository {
+  listLoanRequests(): Promise<DbLoanRequest[]>;
+  createLoanRequest(loan: Omit<DbLoanRequest, 'loanId' | 'status' | 'createdAt' | 'updatedAt'>): Promise<string>;
+  reviewLoanRequest(loanId: string, status: DbLoanRequest['status'], reason?: string, reviewer?: string): Promise<void>;
+  repayLoan(loanId: string): Promise<void>;
+}
+
 export interface ILoginEventRepository {
   listLoginEvents(limit?: number): Promise<DbLoginEvent[]>;
 }
+
+export interface IApplicationRepository {
+  listRequests(): Promise<DbApplicationRequest[]>;
+  reviewRequest(requestId: string, status: DbApplicationRequest['status'], reason?: string, reviewer?: string): Promise<void>;
+}
+
+export interface ICollectionRecordRepository {
+  listRecords(): Promise<DbCollectionRecord[]>;
+}
+
+export interface ILedgerRepository {
+  listEntries(limit?: number): Promise<DbLedgerEntry[]>;
+}
+
+export interface ITeamReportRepository {
+  listReports(): Promise<any[]>;
+}
+
+export interface IOptionOrderRepository {
+  listOrders(): Promise<DbOptionOrder[]>;
+}
+
+export interface INFTOrderRepository {
+  listOrders(): Promise<DbNFTOrder[]>;
+}
+
+export interface IMiningRecordRepository {
+  listRecords(): Promise<DbRewardRecord[]>;
+}
+
+

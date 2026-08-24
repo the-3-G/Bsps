@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, WalletAddressCell, TransactionHashCell, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,13 +10,38 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
-import { mockMiningRecords, MockMiningRecord } from '../../../mocks/db';
+import { miningRecordRepository } from '../../../repositories';
+import { MockMiningRecord } from '../../../mocks/db';
 
 export default function MiningRecordsPage() {
+  const [records, setRecords] = useState<MockMiningRecord[]>([]);
   const [userIdFilter, setUserIdFilter] = useState('');
   const [usernameFilter, setUsernameFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+
+  useEffect(() => {
+    miningRecordRepository.listRecords().then((recs) => {
+      setRecords(
+        recs.map((m) => ({
+          id: m.recordId,
+          userId: m.userUid,
+          username: m.walletAddress ? `${m.walletAddress.slice(0, 6)}...${m.walletAddress.slice(-4)}` : m.userUid,
+          userAddress: m.walletAddress,
+          rewardAmount: m.amountBaseUnits,
+          ethAmount: '0.05 ETH',
+          recordType: (m.recordType || 'Pledge Yield') as 'Pledge Yield' | 'Pool Distribution' | 'Node Referral',
+
+          source: 'Staking Contract',
+          txHash: m.transactionHash,
+          createdAt: m.createdAt,
+          verificationState: m.verificationStatus === 'verified' ? 'on-chain verified' : 'pending validation',
+
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     userId: '',
@@ -80,7 +105,7 @@ export default function MiningRecordsPage() {
     }
   };
 
-  const filtered = mockMiningRecords
+  const filtered = records
     .filter((r) => {
       const f = appliedFilters;
       const matchesUserId = f.userId ? r.userId.toLowerCase().includes(f.userId.toLowerCase()) : true;

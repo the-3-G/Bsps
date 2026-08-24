@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, WalletAddressCell, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,6 +10,7 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
+import { optionOrderRepository } from '../../../repositories';
 
 interface MockOptionOrder {
   orderNumber: string;
@@ -28,29 +29,37 @@ interface MockOptionOrder {
   status: 'win' | 'lose' | 'pending';
 }
 
-const mockOrders: MockOptionOrder[] = Array.from({ length: 15 }, (_, i) => ({
-  orderNumber: `OPT-ORD-${2000 + i}`,
-  userId: `u-${(i % 5) + 1}`,
-  userAddress: `0x${(100 + i).toString(16).padStart(40, '0')}`,
-  tradingPair: 'BTC/USDT',
-  direction: i % 2 === 0 ? 'UP' : 'DOWN',
-  contractPeriod: `${[60, 120, 300][i % 3]}s`,
-  buyAmount: (100 * (i + 1)).toString(),
-  settlementAmount: i % 3 === 0 ? (100 * (i + 1) * 1.85).toString() : '0',
-  fee: (1.5 * (i + 1)).toFixed(2),
-  entryPrice: (60000 + i * 150).toFixed(2),
-  settlementPrice: (i % 3 === 0 ? 60500 + i * 150 : 59500 + i * 150).toFixed(2),
-  startTime: new Date(2026, 7, 10 + i).toISOString(),
-  endTime: new Date(2026, 7, 10 + i, 12, 5).toISOString(),
-  status: i % 3 === 0 ? 'win' : i % 3 === 1 ? 'lose' : 'pending',
-}));
-
 export default function OptionsOrdersPage() {
+  const [orders, setOrders] = useState<MockOptionOrder[]>([]);
   const [userIdFilter, setUserIdFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [orderFilter, setOrderFilter] = useState('');
   const [pairFilter, setPairFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    optionOrderRepository.listOrders().then((ords) => {
+      setOrders(
+        ords.map((o) => ({
+          orderNumber: o.orderNumber,
+          userId: o.userUid,
+          userAddress: o.walletAddress,
+          tradingPair: o.pair,
+          direction: o.direction,
+          contractPeriod: '60s',
+          buyAmount: o.principalBaseUnits,
+          settlementAmount: o.status === 'win' ? '185 USDC' : '0 USDC',
+          fee: o.feeBaseUnits,
+          entryPrice: o.entryPrice,
+          settlementPrice: o.settlementPrice,
+          startTime: o.startAt,
+          endTime: o.endAt,
+          status: o.status,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     userId: '',
@@ -121,7 +130,7 @@ export default function OptionsOrdersPage() {
     }
   };
 
-  const filteredOrders = mockOrders
+  const filteredOrders = orders
     .filter((o) => {
       const f = appliedFilters;
       const matchesUserId = f.userId ? o.userId.toLowerCase().includes(f.userId.toLowerCase()) : true;

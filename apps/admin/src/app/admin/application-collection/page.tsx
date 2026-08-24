@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Landmark, ArrowRight } from 'lucide-react';
 import { PageHeader, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,6 +12,8 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
+import { applicationRepository } from '../../../repositories';
+
 
 interface ApplicationRequest {
   id: string;
@@ -26,25 +30,33 @@ interface ApplicationRequest {
   reviewTime?: string;
 }
 
-const mockRequests: ApplicationRequest[] = Array.from({ length: 10 }, (_, i) => ({
-  id: `req-${i + 1}`,
-  submissionTime: new Date(2026, 7, 5 + i).toISOString(),
-  userId: `u-${(i % 5) + 1}`,
-  username: `user_${(i % 5) + 1}`,
-  userAddress: `0x${(100 + i).toString(16).padStart(40, '0')}`,
-  group: i % 2 === 0 ? 'VIP-Group' : 'Normal-Group',
-  handler: `operator_${(i % 3) + 1}`,
-  amount: `${1000 * (i + 1)} USDC`,
-  status: i % 3 === 0 ? 'approved' : i % 4 === 0 ? 'rejected' : 'pending',
-  reviewReason: i % 4 === 0 ? 'Verification of deposits failed' : undefined,
-  reviewer: i % 3 === 0 || i % 4 === 0 ? `admin_${(i % 2) + 1}` : undefined,
-  reviewTime: i % 3 === 0 || i % 4 === 0 ? new Date(2026, 7, 6 + i).toISOString() : undefined,
-}));
-
 export default function ApplicationCollectionPage() {
+  const [requests, setRequests] = useState<ApplicationRequest[]>([]);
   const [usernameFilter, setUsernameFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    applicationRepository.listRequests().then((reqs) => {
+      setRequests(
+        reqs.map((r) => ({
+          id: r.requestId,
+          submissionTime: r.submittedAt,
+          userId: r.userUid,
+          username: r.walletAddress ? `${r.walletAddress.slice(0, 6)}...${r.walletAddress.slice(-4)}` : r.userUid,
+          userAddress: r.walletAddress,
+          group: r.requestType || 'Standard',
+          handler: r.reviewedBy || 'system',
+          amount: r.amountBaseUnits,
+          status: r.status,
+          reviewReason: r.reviewReason,
+          reviewer: r.reviewedBy,
+          reviewTime: r.reviewedAt,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     username: '',
@@ -104,7 +116,7 @@ export default function ApplicationCollectionPage() {
     }
   };
 
-  const filtered = mockRequests
+  const filtered = requests
     .filter((r) => {
       const f = appliedFilters;
       const matchesUsername = f.username ? r.username.toLowerCase().includes(f.username.toLowerCase()) : true;
@@ -132,6 +144,13 @@ export default function ApplicationCollectionPage() {
         subtitle="Automatic Sweeper configurations and node lease requests."
         actions={
           <div className="flex gap-2">
+            <Link
+              href="/admin/loans"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-all"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              Manage Loan Requests
+            </Link>
             <ColumnVisibilityMenu
               columns={allColumns}
               visibleColumns={visibleColumns}
@@ -139,11 +158,28 @@ export default function ApplicationCollectionPage() {
             />
             <ExportButton
               data={filtered as unknown as Record<string, unknown>[]}
-              filename="application_requests"
+              filename="application_requests_export"
             />
           </div>
         }
       />
+
+      {/* Banner linking to Loan Requests */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Landmark className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>
+            Looking for <strong>User Credit & Loan Applications</strong>? Review collateral coverage and approve loan requests in the dedicated portal.
+          </span>
+        </div>
+        <Link
+          href="/admin/loans"
+          className="inline-flex items-center gap-1 font-bold text-amber-800 hover:text-amber-950 underline shrink-0"
+        >
+          Open Loan Requests Portal <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
 
       <FilterBar>
         <FilterField label="Username">

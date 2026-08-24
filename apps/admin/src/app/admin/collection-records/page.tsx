@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, WalletAddressCell, TransactionHashCell, StatusBadge, SearchButton, ResetFiltersButton } from '../../../components/ui/Reusables';
 import {
   TablePagination,
@@ -10,14 +10,39 @@ import {
   ColumnVisibilityMenu,
   SortHeader,
 } from '../../../components/ui/DataTable';
-import { mockCollections, MockCollectionRecord } from '../../../mocks/db';
+import { collectionRecordRepository } from '../../../repositories';
+import { MockCollectionRecord } from '../../../mocks/db';
 
 export default function CollectionRecordsPage() {
+  const [records, setRecords] = useState<MockCollectionRecord[]>([]);
   const [userIdFilter, setUserIdFilter] = useState('');
   const [usernameFilter, setUsernameFilter] = useState('');
   const [senderFilter, setSenderFilter] = useState('');
   const [recipientFilter, setRecipientFilter] = useState('');
   const [txHashFilter, setTxHashFilter] = useState('');
+
+  useEffect(() => {
+    collectionRecordRepository.listRecords().then((recs) => {
+      setRecords(
+        recs.map((r) => ({
+          id: r.recordId,
+          userId: r.userUid,
+          username: r.senderAddress ? `${r.senderAddress.slice(0, 6)}...${r.senderAddress.slice(-4)}` : r.userUid,
+          status: r.status,
+          sender: r.senderAddress,
+          recipient: r.recipientAddress,
+          txHash: r.transactionHash,
+          token: r.tokenAddress || 'USDC',
+          amount: r.amountBaseUnits,
+          chain: r.chainId === 11155111 ? 'Sepolia' : 'Ethereum Mainnet',
+          blockNumber: r.blockNumber,
+          confirmations: r.confirmationCount,
+          createdAt: r.createdAt,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
+
 
   const [appliedFilters, setAppliedFilters] = useState({
     userId: '',
@@ -86,7 +111,7 @@ export default function CollectionRecordsPage() {
     }
   };
 
-  const filtered = mockCollections
+  const filtered = records
     .filter((c) => {
       const f = appliedFilters;
       const matchesUserId = f.userId ? c.userId.toLowerCase().includes(f.userId.toLowerCase()) : true;

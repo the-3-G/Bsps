@@ -1,18 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { PageHeader, StatusBadge } from '../../../components/ui/Reusables';
-import { mockLoginRecords, mockUsers } from '../../../mocks/db';
-import { userRepository, loginEventRepository } from '../../../repositories';
+import { mockLoginRecords, mockUsers, mockLoans } from '../../../mocks/db';
+import { userRepository, loginEventRepository, loanRepository } from '../../../repositories';
 import { DbLoginEvent } from '@bspc/types';
-import { Users, Cpu, DollarSign, Clock, ShieldAlert, KeyRound } from 'lucide-react';
+import { Users, Cpu, DollarSign, Clock, ShieldAlert, KeyRound, Landmark, ExternalLink } from 'lucide-react';
 import { ExportButton } from '../../../components/ui/DataTable';
 
 export default function ConsolePage() {
   const [totalUsers, setTotalUsers] = useState<number>(0);
   const [activeUsers, setActiveUsers] = useState<number>(0);
   const [suspendedUsers, setSuspendedUsers] = useState<number>(0);
+  const [pendingLoansCount, setPendingLoansCount] = useState<number>(0);
+  const [totalLoansCount, setTotalLoansCount] = useState<number>(0);
   const [loginRecords, setLoginRecords] = useState<any[]>([]);
+
 
   useEffect(() => {
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
@@ -23,6 +27,8 @@ export default function ConsolePage() {
       setActiveUsers(act);
       setSuspendedUsers(tot - act);
       setLoginRecords(mockLoginRecords);
+      setTotalLoansCount(mockLoans.length);
+      setPendingLoansCount(mockLoans.filter((l) => l.status === 'pending').length);
       return;
     }
 
@@ -42,10 +48,20 @@ export default function ConsolePage() {
         setSuspendedUsers(0);
       });
 
+    loanRepository
+      .listLoanRequests()
+      .then((loans) => {
+        setTotalLoansCount(loans.length);
+        setPendingLoansCount(loans.filter((l) => l.status === 'pending').length);
+      })
+      .catch((err) => {
+        console.error('Failed to load loan stats:', err);
+      });
+
     loginEventRepository
       .listLoginEvents(15) // fetch recent 15 logins
-      .then((events) => {
-        setLoginRecords(events.map(ev => ({
+      .then((events: DbLoginEvent[]) => {
+        setLoginRecords(events.map((ev: DbLoginEvent) => ({
           id: ev.eventId,
           timestamp: ev.createdAt,
           ipAddress: ev.ipHash,
@@ -54,9 +70,10 @@ export default function ConsolePage() {
           result: ev.success ? 'success' : 'failed'
         })));
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error('Failed to load login events:', err);
       });
+
   }, []);
 
   // Masking states for security demonstration
@@ -69,6 +86,13 @@ export default function ConsolePage() {
         subtitle="System dashboard overview and active administration console."
         actions={
           <div className="flex gap-2">
+            <Link
+              href="/admin/loans"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-all"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              Loan Requests ({pendingLoansCount} Pending)
+            </Link>
             <button
               onClick={() => setHasAuditPermission(!hasAuditPermission)}
               className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded border transition-all ${
@@ -89,7 +113,7 @@ export default function ConsolePage() {
       />
 
       {/* Stats Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-teal-50 rounded text-teal-primary shrink-0">
             <Users className="w-5 h-5" />
@@ -102,6 +126,26 @@ export default function ConsolePage() {
             </div>
           </div>
         </div>
+
+        {/* Loan Requests Card */}
+        <Link
+          href="/admin/loans"
+          className="bg-white p-4 rounded border border-amber-200 shadow-sm hover:border-amber-400 transition-all flex items-center gap-4 group"
+        >
+          <div className="p-3 bg-amber-50 rounded text-amber-600 shrink-0 group-hover:scale-110 transition-transform">
+            <Landmark className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center justify-between">
+              <span>Loan Requests</span>
+              <ExternalLink className="w-3 h-3 text-amber-500" />
+            </div>
+            <div className="text-xl font-bold text-gray-800">{totalLoansCount} Total</div>
+            <div className="text-[10px] text-amber-700 font-bold mt-1">
+              {pendingLoansCount} Pending Review
+            </div>
+          </div>
+        </Link>
 
         <div className="bg-white p-4 rounded border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-blue-50 rounded text-blue-600 shrink-0">
@@ -136,6 +180,7 @@ export default function ConsolePage() {
           </div>
         </div>
       </div>
+
 
       {/* Main Console Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
