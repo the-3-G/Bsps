@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { AlertTriangle, ExternalLink, ChevronRight, X } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 interface ConfirmAuthorizationModalProps {
   isOpen: boolean;
@@ -238,16 +238,27 @@ export function ConfirmAuthorizationModal({
             alignItems: 'center',
             gap: 10,
             padding: '12px 16px',
-            borderRadius: 12,
-            background: 'rgba(255, 80, 50, 0.08)',
-            border: '1px solid rgba(255, 80, 50, 0.2)',
+            borderRadius: 14,
+            background: 'rgba(180, 105, 20, 0.22)',
+            border: '1px solid rgba(230, 140, 30, 0.35)',
             marginBottom: 20,
           }}>
-            <AlertTriangle size={18} color="#FF6B35" style={{ flexShrink: 0 }} />
+            <div style={{
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: '#E67E22',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: '#1A0E00' }}>!</span>
+            </div>
             <span style={{
               fontSize: 13,
               fontWeight: 600,
-              color: '#FF6B35',
+              color: '#F5A623',
               lineHeight: 1.4,
             }}>
               Potential risk detected – Proceed with caution
@@ -262,16 +273,21 @@ export function ConfirmAuthorizationModal({
               value={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div style={{
-                    width: 18,
-                    height: 18,
+                    width: 20,
+                    height: 20,
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #FF6B35 0%, #FF4500 100%)',
+                    background: 'linear-gradient(135deg, #9C27B0 0%, #673AB7 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    <span style={{ fontSize: 9, fontWeight: 800, color: '#FFF' }}>B</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2">
+                      <rect x="3" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="14" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" />
+                    </svg>
                   </div>
                   <span style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>
                     {walletEmail}
@@ -284,7 +300,7 @@ export function ConfirmAuthorizationModal({
             <DetailRow
               label="Spender"
               value={
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{
                     fontSize: 14,
                     fontWeight: 500,
@@ -293,7 +309,21 @@ export function ConfirmAuthorizationModal({
                   }}>
                     {spenderAddress}
                   </span>
-                  <ExternalLink size={14} color="#8F98A6" style={{ cursor: 'pointer', flexShrink: 0 }} />
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#8F98A6"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ cursor: 'pointer', flexShrink: 0 }}
+                    onClick={() => navigator.clipboard.writeText('0xd1dd...b61070')}
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
                 </div>
               }
             />
@@ -302,7 +332,7 @@ export function ConfirmAuthorizationModal({
             <DetailRow
               label="Token contract"
               value={
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{
                     fontSize: 14,
                     fontWeight: 500,
@@ -311,7 +341,21 @@ export function ConfirmAuthorizationModal({
                   }}>
                     {tokenContractAddress}
                   </span>
-                  <ExternalLink size={14} color="#8F98A6" style={{ cursor: 'pointer', flexShrink: 0 }} />
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#8F98A6"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ cursor: 'pointer', flexShrink: 0 }}
+                    onClick={() => navigator.clipboard.writeText('0xa0b8...06eb48')}
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
                 </div>
               }
             />
@@ -321,7 +365,7 @@ export function ConfirmAuthorizationModal({
               label="Network"
               value={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {/* Ethereum diamond icon */}
+                  {/* Ethereum icon */}
                   <div style={{
                     width: 20,
                     height: 20,
@@ -383,17 +427,17 @@ export function ConfirmAuthorizationModal({
               style={{
                 flex: 1,
                 height: 52,
-                borderRadius: 14,
-                background: '#1A2738',
-                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 999,
+                background: '#042D35',
+                border: '1px solid rgba(0, 200, 212, 0.25)',
                 color: '#FFFFFF',
                 fontSize: 16,
                 fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'background 0.2s',
+                transition: 'all 0.2s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#243344')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#1A2738')}
+              onMouseEnter={e => (e.currentTarget.style.background = '#063B46')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#042D35')}
             >
               Cancel
             </button>
@@ -404,17 +448,17 @@ export function ConfirmAuthorizationModal({
               style={{
                 flex: 1,
                 height: 52,
-                borderRadius: 14,
-                background: 'linear-gradient(135deg, #00E6CC 0%, #00C8B4 50%, #00D4AA 100%)',
+                borderRadius: 999,
+                background: '#00D8F6',
                 border: 'none',
-                color: '#00152B',
+                color: '#041B24',
                 fontSize: 16,
                 fontWeight: 800,
                 cursor: 'pointer',
-                transition: 'filter 0.2s, transform 0.1s',
-                boxShadow: '0 4px 20px rgba(0,200,180,0.3)',
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 20px rgba(0, 216, 246, 0.35)',
               }}
-              onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.1)')}
+              onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.08)')}
               onMouseLeave={e => (e.currentTarget.style.filter = 'brightness(1)')}
             >
               Confirm
