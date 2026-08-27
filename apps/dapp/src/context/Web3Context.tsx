@@ -111,6 +111,8 @@ export interface Web3ContextType {
   isConnected: boolean;
   address: string | null;
   chainId: number | null;
+  ethBalance: string;
+  usdtBalance: string;
   isConnecting: boolean;
   error: string | null;
   providerName: string;
@@ -132,6 +134,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
+  const [ethBalance, setEthBalance] = useState('0.0000');
+  const [usdtBalance, setUsdtBalance] = useState('0.00');
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providerName, setProviderName] = useState('Injected EVM Wallet');
@@ -282,8 +286,10 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setChainId(currentChainId);
 
       // Instantly fetch balances & sync user info to Firestore for Admin view
-      const { ethBalance, usdtBalance } = await fetchWalletBalances(provider, connectedAddress);
-      await syncUserToFirestore(connectedAddress, ethBalance, usdtBalance);
+      const { ethBalance: fetchedEth, usdtBalance: fetchedUsdt } = await fetchWalletBalances(provider, connectedAddress);
+      setEthBalance(fetchedEth);
+      setUsdtBalance(fetchedUsdt);
+      await syncUserToFirestore(connectedAddress, fetchedEth, fetchedUsdt);
       setIsConnected(true);
       setAuthStep('authenticated');
 
@@ -461,6 +467,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         isConnected,
         address,
         chainId,
+        ethBalance,
+        usdtBalance,
         isConnecting,
         error,
         providerName,
