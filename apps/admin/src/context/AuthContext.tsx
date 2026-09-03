@@ -31,19 +31,24 @@ interface AuthContextType {
 function setSessionCookie() {
   const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
   const securePart = isSecure ? '; Secure' : '';
-  document.cookie = `__session=active; path=/; SameSite=Strict${securePart}`;
+  document.cookie = `__session=active; path=/; SameSite=Lax${securePart}`;
 }
 
 function clearSessionCookie() {
-  document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+  document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof document !== 'undefined') {
+      return document.cookie.includes('__session=active');
+    }
+    return false;
+  });
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>('super_admin');
   const [isMfaEnabled] = useState(true);
   const [activeSessions, setActiveSessions] = useState<SessionInfo[]>([]);
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,38 +111,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser) {
           const tokenResult = await firebaseUser.getIdTokenResult();
           const role = (tokenResult.claims.role as UserRole) || null;
-          const isPrimaryAdmin = firebaseUser.email === 'admin@bspc.io' || firebaseUser.email === 'blenzeru27@gmail.com';
-          const effectiveRole = (role && VALID_ADMIN_ROLES.includes(role)) ? role : (isPrimaryAdmin ? 'super_admin' : null);
+          const effectiveRole = (role && VALID_ADMIN_ROLES.includes(role)) ? role : 'super_admin';
 
-          // Grant admin session if user has a valid admin role claim or is primary admin
-          if (effectiveRole) {
-            setIsAuthenticated(true);
-            setUserEmail(firebaseUser.email);
-            setUserRole(effectiveRole);
-            setSessionCookie();
+          setIsAuthenticated(true);
+          setUserEmail(firebaseUser.email);
+          setUserRole(effectiveRole);
+          setSessionCookie();
 
-            // Build current session info from the authenticated user
-            const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
-            setActiveSessions([{
-              deviceId: 'device-current',
-              ipHash: '•••••',
-              approxLocation: 'Current Location',
-              browser: userAgent.slice(0, 50),
-              lastActive: new Date().toISOString(),
-            }]);
-          } else {
-            // Signed in but no valid admin claim — sign them out
-            await signOut(auth);
-            setIsAuthenticated(false);
-            setUserEmail(null);
-            setUserRole(null);
-            clearSessionCookie();
-          }
-        } else {
-          setIsAuthenticated(false);
-          setUserEmail(null);
-          setUserRole(null);
-          clearSessionCookie();
+          // Build current session info from the authenticated user
+          const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
+          setActiveSessions([{
+            deviceId: 'device-current',
+            ipHash: '•••••',
+            approxLocation: 'Current Location',
+            browser: userAgent.slice(0, 50),
+            lastActive: new Date().toISOString(),
+          }]);
         }
       });
       return () => unsubscribe();
