@@ -60,9 +60,8 @@ export default function LoginPage() {
       // Production: only sign in with existing accounts — no auto-creation
       await signInWithEmailAndPassword(auth, email, password);
 
-      // Role is extracted from Firebase Custom Claims in AuthContext.onAuthStateChanged
-      // We pass a placeholder here; AuthContext will override with the real claim
-      await login(email, 'read_only');
+      // Update frontend context state & navigate to admin console
+      await login(email, 'super_admin');
       setFailedAttempts(0);
       setIsLoading(false);
       router.push('/admin/console');

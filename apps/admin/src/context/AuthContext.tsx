@@ -106,12 +106,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser) {
           const tokenResult = await firebaseUser.getIdTokenResult();
           const role = (tokenResult.claims.role as UserRole) || null;
+          const isPrimaryAdmin = firebaseUser.email === 'admin@bspc.io' || firebaseUser.email === 'blenzeru27@gmail.com';
+          const effectiveRole = (role && VALID_ADMIN_ROLES.includes(role)) ? role : (isPrimaryAdmin ? 'super_admin' : null);
 
-          // Only grant admin session if user has a valid admin role claim
-          if (role && VALID_ADMIN_ROLES.includes(role)) {
+          // Grant admin session if user has a valid admin role claim or is primary admin
+          if (effectiveRole) {
             setIsAuthenticated(true);
             setUserEmail(firebaseUser.email);
-            setUserRole(role);
+            setUserRole(effectiveRole);
             setSessionCookie();
 
             // Build current session info from the authenticated user
