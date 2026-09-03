@@ -118,6 +118,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         { label: 'Team Reports', path: '/admin/team-reports', icon: <TrendingUp className="w-4 h-4" /> },
       ],
     },
+    {
+      title: 'System',
+      icon: <Shield className="w-4 h-4" />,
+      items: [
+        { label: 'Security', path: '/admin/security', icon: <Shield className="w-4 h-4" /> },
+      ],
+    },
   ];
 
   const handleItemClick = (path: string, label: string) => {

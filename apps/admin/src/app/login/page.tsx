@@ -1,25 +1,45 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Lock } from 'lucide-react';
 import { UserRole } from '@bspc/types';
-import { getFirebaseAuth, getFirebaseFunctions } from '@bspc/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { httpsCallable } from 'firebase/functions';
+import { getFirebaseAuth } from '@bspc/firebase';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+
+const MAX_FAILED_ATTEMPTS = 5;
+const COOLDOWN_SECONDS = 30;
 
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('super_admin');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
+
+  const startCooldown = useCallback(() => {
+    setCooldownRemaining(COOLDOWN_SECONDS);
+    const interval = setInterval(() => {
+      setCooldownRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (cooldownRemaining > 0) return;
+
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -27,7 +47,7 @@ export default function LoginPage() {
 
     if (useMock) {
       setTimeout(async () => {
-        await login(email, role);
+        await login(email, 'super_admin');
         setIsLoading(false);
         router.push('/admin/console');
       }, 1000);
@@ -37,28 +57,63 @@ export default function LoginPage() {
     try {
       const auth = getFirebaseAuth();
 
-      // Sign in with email & password, or create an account if it doesn't exist
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-      } catch (signInErr: any) {
-        if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
-          await createUserWithEmailAndPassword(auth, email, password);
-        } else {
-          throw signInErr;
-        }
-      }
+      // Production: only sign in with existing accounts — no auto-creation
+      await signInWithEmailAndPassword(auth, email, password);
 
-      // Update frontend context state & navigate to admin console
-      // (onAuthStateChanged in AuthContext will handle role extraction from custom claims)
-      await login(email, role);
+      // Role is extracted from Firebase Custom Claims in AuthContext.onAuthStateChanged
+      // We pass a placeholder here; AuthContext will override with the real claim
+      await login(email, 'read_only');
+      setFailedAttempts(0);
       setIsLoading(false);
       router.push('/admin/console');
     } catch (err: any) {
-      console.error('Admin authentication error:', err);
-      setErrorMessage(err.message || 'Authentication failed. Please check your email and password.');
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+
+      // Sanitized error messages — don't leak whether user exists or not
+      if (
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/invalid-email'
+      ) {
+        setErrorMessage('Invalid email or password. Please try again.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setErrorMessage('Too many failed attempts. Please try again later.');
+      } else if (err.code === 'auth/user-disabled') {
+        setErrorMessage('This account has been disabled. Contact your administrator.');
+      } else {
+        setErrorMessage('Authentication failed. Please try again.');
+      }
+
+      // Activate cooldown after max failed attempts
+      if (newAttempts >= MAX_FAILED_ATTEMPTS) {
+        startCooldown();
+        setFailedAttempts(0);
+      }
+
       setIsLoading(false);
     }
   };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setErrorMessage('Enter your email address above, then click Forgot Password.');
+      return;
+    }
+    try {
+      const auth = getFirebaseAuth();
+      await sendPasswordResetEmail(auth, email);
+      setResetEmailSent(true);
+      setErrorMessage(null);
+    } catch {
+      // Don't reveal whether the email exists — always show success
+      setResetEmailSent(true);
+      setErrorMessage(null);
+    }
+  };
+
+  const isLocked = cooldownRemaining > 0;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -68,12 +123,27 @@ export default function LoginPage() {
             <ShieldCheck className="w-8 h-8" />
           </div>
           <h1 className="text-lg font-bold text-gray-900">Admin Control Gate</h1>
-          <p className="text-xs text-gray-500">BSPC Administrative Authentication Portal</p>
+          <p className="text-xs text-gray-500">Authorized Administrative Access Only</p>
         </div>
 
+        {/* Cooldown Warning */}
+        {isLocked && (
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-xl text-center flex items-center justify-center gap-2">
+            <Lock className="w-3.5 h-3.5" />
+            Too many failed attempts. Try again in <span className="font-bold">{cooldownRemaining}s</span>
+          </div>
+        )}
+
         {errorMessage && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl text-center">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl text-center flex items-center justify-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             {errorMessage}
+          </div>
+        )}
+
+        {resetEmailSent && (
+          <div className="p-3 bg-teal-50 border border-teal-200 text-teal-700 text-xs rounded-xl text-center">
+            If an account exists with that email, a password reset link has been sent.
           </div>
         )}
 
@@ -81,50 +151,50 @@ export default function LoginPage() {
           <div>
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Email Address</label>
             <input
+              id="login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@bspc.io"
               className="w-full border border-gray-300 rounded p-2 text-xs focus:outline-none focus:border-teal-primary text-gray-800"
               required
+              disabled={isLocked}
+              autoComplete="email"
             />
           </div>
 
           <div>
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Password</label>
             <input
+              id="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               className="w-full border border-gray-300 rounded p-2 text-xs focus:outline-none focus:border-teal-primary text-gray-800"
               required
+              disabled={isLocked}
+              autoComplete="current-password"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Role Assignment (Mock)</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full border border-gray-300 rounded p-2 text-xs bg-white focus:outline-none focus:border-teal-primary text-gray-855"
-            >
-              <option value="super_admin">super_admin</option>
-              <option value="operations_admin">operations_admin</option>
-              <option value="finance_reviewer">finance_reviewer</option>
-              <option value="support">support</option>
-              <option value="auditor">auditor</option>
-              <option value="read_only">read_only</option>
-            </select>
           </div>
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isLocked}
             className="w-full bg-teal-primary hover:bg-teal-hover text-white text-xs font-semibold py-2 rounded transition-all shadow-sm disabled:opacity-50"
           >
-            {isLoading ? 'Authenticating Gateway...' : 'Secure Login'}
+            {isLoading ? 'Authenticating...' : isLocked ? `Locked (${cooldownRemaining}s)` : 'Secure Login'}
           </button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="text-[10px] text-gray-400 hover:text-teal-primary transition-colors"
+            >
+              Forgot Password?
+            </button>
+          </div>
         </form>
       </div>
     </div>

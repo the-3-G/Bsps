@@ -153,8 +153,8 @@ export default function ConsolePage() {
           </div>
           <div>
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Funds Swept</div>
-            <div className="text-xl font-bold text-gray-800">452,190.50 USDC</div>
-            <div className="text-[10px] text-teal-primary mt-1">✓ On-chain verified</div>
+            <div className="text-xl font-bold text-gray-800">—</div>
+            <div className="text-[10px] text-gray-400 mt-1">Awaiting on-chain sync</div>
           </div>
         </div>
 
@@ -164,8 +164,8 @@ export default function ConsolePage() {
           </div>
           <div>
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Active Pledge APR</div>
-            <div className="text-xl font-bold text-gray-800">18.5% Avg</div>
-            <div className="text-[10px] text-gray-500 mt-1">15 active contracts</div>
+            <div className="text-xl font-bold text-gray-800">—</div>
+            <div className="text-[10px] text-gray-400 mt-1">No active contracts</div>
           </div>
         </div>
 
@@ -175,8 +175,8 @@ export default function ConsolePage() {
           </div>
           <div>
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Collection Sweeper</div>
-            <div className="text-xl font-bold text-gray-800">Online</div>
-            <div className="text-[10px] text-green-600 mt-1">Normal gas fees</div>
+            <div className="text-xl font-bold text-gray-800">Standby</div>
+            <div className="text-[10px] text-gray-400 mt-1">Awaiting configuration</div>
           </div>
         </div>
       </div>

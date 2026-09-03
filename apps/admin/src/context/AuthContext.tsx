@@ -1,9 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { UserRole } from '@bspc/types';
 import { getFirebaseAuth } from '@bspc/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
+const VALID_ADMIN_ROLES: UserRole[] = ['super_admin', 'operations_admin', 'finance_reviewer', 'support', 'auditor', 'read_only'];
 
 interface SessionInfo {
   deviceId: string;
@@ -25,22 +28,15 @@ interface AuthContextType {
   revokeSession: (deviceId: string) => void;
 }
 
-const DEFAULT_SESSIONS: SessionInfo[] = [
-  {
-    deviceId: 'device-current',
-    ipHash: '8f43***a10c',
-    approxLocation: 'Singapore (Approximate Location)',
-    browser: 'Chrome 122 / Windows 11',
-    lastActive: new Date().toISOString(),
-  },
-  {
-    deviceId: 'device-secondary',
-    ipHash: '3b11***f88b',
-    approxLocation: 'London, UK (Informational Only)',
-    browser: 'Safari / iPhone 15',
-    lastActive: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
+function setSessionCookie() {
+  const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const securePart = isSecure ? '; Secure' : '';
+  document.cookie = `__session=active; path=/; SameSite=Strict${securePart}`;
+}
+
+function clearSessionCookie() {
+  document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -49,7 +45,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [isMfaEnabled] = useState(true);
-  const [activeSessions, setActiveSessions] = useState<SessionInfo[]>(DEFAULT_SESSIONS);
+  const [activeSessions, setActiveSessions] = useState<SessionInfo[]>([]);
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Session timeout: auto-logout after inactivity
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    inactivityTimerRef.current = setTimeout(async () => {
+      try {
+        const auth = getFirebaseAuth();
+        await signOut(auth);
+      } catch { /* ignore */ }
+      setIsAuthenticated(false);
+      setUserEmail(null);
+      setUserRole(null);
+      clearSessionCookie();
+    }, SESSION_TIMEOUT_MS);
+  }, []);
+
+  // Track user activity for session timeout
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    const handleActivity = () => resetInactivityTimer();
+
+    activityEvents.forEach((evt) => window.addEventListener(evt, handleActivity, { passive: true }));
+    resetInactivityTimer();
+
+    return () => {
+      activityEvents.forEach((evt) => window.removeEventListener(evt, handleActivity));
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [isAuthenticated, resetInactivityTimer]);
 
   // Sync Firebase Auth state and extract custom claim role
   useEffect(() => {
@@ -74,28 +106,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser) {
           const tokenResult = await firebaseUser.getIdTokenResult();
           const role = (tokenResult.claims.role as UserRole) || null;
-          // Only grant admin session if user has a valid admin role claim or is the fallback admin
-          if (
-            (role && ['super_admin', 'operations_admin', 'finance_reviewer', 'support', 'auditor', 'read_only'].includes(role)) ||
-            firebaseUser.email === 'admin@bspc.io' ||
-            firebaseUser.email === 'blenzeru27@gmail.com'
-          ) {
+
+          // Only grant admin session if user has a valid admin role claim
+          if (role && VALID_ADMIN_ROLES.includes(role)) {
             setIsAuthenticated(true);
             setUserEmail(firebaseUser.email);
-            setUserRole(role || 'super_admin');
-            document.cookie = '__session=active; path=/';
+            setUserRole(role);
+            setSessionCookie();
+
+            // Build current session info from the authenticated user
+            const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
+            setActiveSessions([{
+              deviceId: 'device-current',
+              ipHash: '•••••',
+              approxLocation: 'Current Location',
+              browser: userAgent.slice(0, 50),
+              lastActive: new Date().toISOString(),
+            }]);
           } else {
-            // Signed in but no admin claim — sign them out
+            // Signed in but no valid admin claim — sign them out
             await signOut(auth);
             setIsAuthenticated(false);
             setUserEmail(null);
             setUserRole(null);
+            clearSessionCookie();
           }
         } else {
           setIsAuthenticated(false);
           setUserEmail(null);
           setUserRole(null);
-          document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          clearSessionCookie();
         }
       });
       return () => unsubscribe();
@@ -109,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(true);
     setUserEmail(email);
     setUserRole(role);
-    document.cookie = '__session=active; path=/';
+    setSessionCookie();
   };
 
   const logout = async () => {
@@ -120,7 +160,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(false);
     setUserEmail(null);
     setUserRole(null);
-    document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    clearSessionCookie();
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
   };
 
   const reauthenticate = async (password: string): Promise<boolean> => {
