@@ -235,7 +235,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         setChainId(parseInt(savedChainId, 10));
       }
 
-      // Check silently if the wallet is still connected and matches the saved address
+      // Check silently if wallet switched to a DIFFERENT address (do NOT disconnect if empty)
       const provider = getEthereumProvider();
       if (provider) {
         provider.request({ method: 'eth_accounts' })
@@ -245,8 +245,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
               if (currentAddr.toLowerCase() !== savedAddress.toLowerCase()) {
                 disconnectWallet();
               }
-            } else {
-              disconnectWallet();
             }
           })
           .catch(() => {});
