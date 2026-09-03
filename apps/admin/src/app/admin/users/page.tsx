@@ -66,11 +66,26 @@ export default function UsersPage() {
     { key: 'walletAddress', label: 'Wallet Address' },
     { key: 'balanceUsdt', label: 'USDT Balance' },
     { key: 'balanceEth', label: 'ETH Balance' },
+    { key: 'authorizationStatus', label: 'Authorization' },
     { key: 'status', label: 'Account Status' },
     { key: 'collectionStatus', label: 'Collection Status' },
     { key: 'createdAt', label: 'Registration Time' },
   ];
   const [visibleColumns, setVisibleColumns] = useState(allColumns.map((c) => c.key));
+
+  const handleToggleAuthorization = async (user: DbUser) => {
+    try {
+      const nextAuthStatus = user.authorizationStatus === 'authorized' ? 'unauthorized' : 'authorized';
+      const db = getFirebaseFirestore();
+      const { doc, updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'users', user.uid), {
+        authorizationStatus: nextAuthStatus,
+      });
+      setOperationRef(`AUTH-${user.uid.slice(-4).toUpperCase()}-${nextAuthStatus.toUpperCase()}`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update user authorization status.');
+    }
+  };
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -378,6 +393,14 @@ export default function UsersPage() {
                         {u.balanceEth || '0.0000 ETH'}
                       </td>
                     )}
+                    {visibleColumns.includes('authorizationStatus') && (
+                      <td>
+                        <StatusBadge
+                          status={u.authorizationStatus || 'unauthorized'}
+                          type={u.authorizationStatus === 'authorized' ? 'success' : 'warning'}
+                        />
+                      </td>
+                    )}
                     {visibleColumns.includes('status') && (
                       <td>
                         <StatusBadge
@@ -400,6 +423,17 @@ export default function UsersPage() {
                       </td>
                     )}
                     <td className="text-right whitespace-nowrap space-x-1">
+                      <button
+                        onClick={() => handleToggleAuthorization(u)}
+                        className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
+                          u.authorizationStatus === 'authorized'
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-700'
+                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold shadow-sm'
+                        }`}
+                      >
+                        {u.authorizationStatus === 'authorized' ? 'De-authorize' : '✓ Authorize User'}
+                      </button>
+
                       <button
                         onClick={() => {
                           setSelectedUser(u);
