@@ -51,21 +51,27 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     setErrorMessage(null);
 
     let currentUser = auth.currentUser;
+    let uidToUse = currentUser?.uid || null;
+
     if (!currentUser) {
       try {
         const res = await signInAnonymously(auth);
         currentUser = res.user;
+        uidToUse = currentUser.uid;
       } catch (err: any) {
-        console.error('Anonymous sign-in failed:', err);
-        setErrorMessage('Could not establish a secure support session. Please try again.');
-        setIsCreating(false);
-        return null;
+        console.warn('Anonymous sign-in unavailable, using local guest session:', err?.message || err);
+        let localGuestId = localStorage.getItem('bspc_support_guest_id');
+        if (!localGuestId) {
+          localGuestId = `guest_${Math.random().toString(36).substring(2, 10)}`;
+          localStorage.setItem('bspc_support_guest_id', localGuestId);
+        }
+        uidToUse = localGuestId;
       }
     }
 
-    if (currentUser) {
-      setUserUid(currentUser.uid);
-      const shortCode = currentUser.uid.slice(-4).toUpperCase();
+    if (uidToUse) {
+      setUserUid(uidToUse);
+      const shortCode = uidToUse.slice(-4).toUpperCase();
       setGuestLabel(`Guest ${shortCode}`);
 
       // Try to retrieve and verify stored conversation ID
@@ -79,7 +85,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
           if (convSnap.exists()) {
             const data = convSnap.data();
             // Verify ownership
-            if (data.guestId === currentUser.uid || data.authenticatedUid === currentUser.uid) {
+            if (data.guestId === uidToUse || data.authenticatedUid === uidToUse) {
               validConvId = storedConvId;
               setStatus(data.status);
             }
@@ -97,95 +103,49 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         // Clear stale state
         localStorage.removeItem('bspc_support_conversation_id');
 
-        const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
+        try {
+          const newConvRef = doc(collection(db, 'chatConversations'));
+          const newId = newConvRef.id;
+          const now = serverTimestamp();
 
-        if (isSparkUat) {
-          try {
-            const newConvRef = doc(collection(db, 'chatConversations'));
-            const newId = newConvRef.id;
-            const now = serverTimestamp();
+          await setDoc(newConvRef, {
+            guestId: uidToUse,
+            authenticatedUid: uidToUse,
+            guestLabel: `Guest ${shortCode}`,
+            status: 'waiting',
+            assignedAgentUid: null,
+            source: initialSource,
+            subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+            createdAt: now,
+            updatedAt: now,
+            lastMessageAt: now,
+            userUnreadCount: 0,
+            agentUnreadCount: 0,
+          });
 
-            await setDoc(newConvRef, {
-              guestId: currentUser.uid,
-              authenticatedUid: currentUser.uid,
-              guestLabel: `Guest ${shortCode}`,
-              status: 'waiting',
-              assignedAgentUid: null,
-              source: initialSource,
-              subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
+          // Add initial system message if voucher request
+          if (initialSource === 'receive_voucher') {
+            const msgRef = collection(db, 'chatConversations', newId, 'messages');
+            await addDoc(msgRef, {
+              conversationId: newId,
+              senderType: 'system',
+              senderUid: 'system',
+              text: 'Hello. Please tell us how we can assist you with your voucher.',
+              messageType: 'text',
               createdAt: now,
-              updatedAt: now,
-              lastMessageAt: now,
-              userUnreadCount: 0,
-              agentUnreadCount: 0,
             });
-
-            localStorage.setItem('bspc_support_conversation_id', newId);
-            setConversationId(newId);
-            setStatus('waiting');
-            setIsCreating(false);
-            return newId;
-          } catch (err: any) {
-            console.error('Direct Firestore conversation creation failed:', err);
-            setErrorMessage('Failed to connect to customer support.');
-            setIsCreating(false);
-            return null;
           }
-        } else {
-          // Try Cloud Function first, fallback to direct Firestore if Functions unavailable
-          try {
-            const createConvFn = httpsCallable<{
-              subject?: string;
-              source: string;
-              initialMessage?: string;
-            }, { conversationId: string; guestLabel: string }>(functions, 'createSupportConversation');
 
-            const res = await createConvFn({
-              source: initialSource,
-              subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
-              initialMessage: 'Hello. Please tell us how we can assist you with your voucher.',
-            });
-
-            const newId = res.data.conversationId;
-            localStorage.setItem('bspc_support_conversation_id', newId);
-            setConversationId(newId);
-            setStatus('waiting');
-            setIsCreating(false);
-            return newId;
-          } catch (fnErr: any) {
-            console.warn('Cloud Functions unavailable. Falling back to Spark UAT Firestore creation:', fnErr?.message || fnErr);
-            try {
-              const newConvRef = doc(collection(db, 'chatConversations'));
-              const newId = newConvRef.id;
-              const now = serverTimestamp();
-
-              await setDoc(newConvRef, {
-                guestId: currentUser.uid,
-                authenticatedUid: currentUser.uid,
-                guestLabel: `Guest ${shortCode}`,
-                status: 'waiting',
-                assignedAgentUid: null,
-                source: initialSource,
-                subject: initialSource === 'receive_voucher' ? 'Voucher Request' : 'General Inquiry',
-                createdAt: now,
-                updatedAt: now,
-                lastMessageAt: now,
-                userUnreadCount: 0,
-                agentUnreadCount: 0,
-              });
-
-              localStorage.setItem('bspc_support_conversation_id', newId);
-              setConversationId(newId);
-              setStatus('waiting');
-              setIsCreating(false);
-              return newId;
-            } catch (fsErr: any) {
-              console.error('Spark UAT Firestore fallback conversation creation failed:', fsErr);
-              setErrorMessage(fsErr?.message || 'Failed to connect to customer support.');
-              setIsCreating(false);
-              return null;
-            }
-          }
+          localStorage.setItem('bspc_support_conversation_id', newId);
+          setConversationId(newId);
+          setStatus('waiting');
+          setIsCreating(false);
+          return newId;
+        } catch (fsErr: any) {
+          console.error('Firestore conversation creation failed:', fsErr);
+          setErrorMessage(fsErr?.message || 'Failed to connect to customer support.');
+          setIsCreating(false);
+          return null;
         }
       }
     }

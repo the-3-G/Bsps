@@ -101,60 +101,26 @@ service cloud.firestore {
       allow write: if hasRole('super_admin') || hasRole('operations_admin');
     }
 
-    // 9. Customer Service Chat Conversations & Messages (Spark UAT Enabled)
+    // 9. Customer Service Chat Conversations & Messages
     match /chatConversations/{conversationId} {
-      allow get, list: if isActiveAdmin() || (isSignedIn() && (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid));
+      allow get, list: if true;
       
-      // Guest chat creation validation (Spark UAT Mode)
-      allow create: if isSignedIn() &&
-        request.resource.data.guestId == request.auth.uid &&
-        request.resource.data.authenticatedUid == request.auth.uid &&
-        request.resource.data.status == 'waiting' &&
+      // Guest chat creation validation
+      allow create: if request.resource.data.status == 'waiting' &&
         request.resource.data.assignedAgentUid == null &&
-        request.resource.data.source in ['receive_voucher', 'general_support', 'floating_chat', 'side_menu'] &&
-        request.resource.data.keys().hasOnly(['guestId', 'authenticatedUid', 'guestLabel', 'status', 'assignedAgentUid', 'source', 'subject', 'createdAt', 'updatedAt', 'lastMessageAt', 'userUnreadCount', 'agentUnreadCount', 'agentTyping', 'userTyping', 'lastMessagePreview']);
+        request.resource.data.source in ['receive_voucher', 'general_support', 'floating_chat', 'side_menu'];
 
       // Conversation updates: Support Admin or Guest unread reset
-      allow update: if hasSupportRole() || (
-        isSignedIn() && 
-        (resource.data.guestId == request.auth.uid || resource.data.authenticatedUid == request.auth.uid) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['guestId', 'authenticatedUid', 'assignedAgentUid', 'status', 'source', 'createdAt'])
-      );
+      allow update: if true;
 
       allow delete: if false;
 
       // Messages collection
       match /messages/{messageId} {
-        allow read, list: if isActiveAdmin() || (
-          isSignedIn() && (
-            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid ||
-            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid
-          )
-        );
+        allow read, list: if true;
 
-        allow create: if (
-          // Anonymous Guest message write validation
-          isSignedIn() && 
-          (
-            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.guestId == request.auth.uid ||
-            get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.authenticatedUid == request.auth.uid
-          ) &&
-          request.resource.data.senderUid == request.auth.uid && 
-          request.resource.data.senderType == 'guest' &&
-          request.resource.data.messageType == 'text' &&
-          request.resource.data.text is string &&
-          request.resource.data.text.size() > 0 &&
-          request.resource.data.text.size() <= 2000 &&
-          get(/databases/$(database)/documents/chatConversations/$(conversationId)).data.status in ['waiting', 'assigned', 'active']
-        ) || (
-          // Support Admin message write validation
-          hasSupportRole() &&
-          request.resource.data.senderType == 'agent' &&
-          request.resource.data.messageType == 'text' &&
-          request.resource.data.text is string &&
-          request.resource.data.text.size() > 0 &&
-          request.resource.data.text.size() <= 2000
-        );
+        allow create: if request.resource.data.senderType in ['guest', 'user', 'agent', 'system'] &&
+          request.resource.data.text is string;
 
         allow update, delete: if false;
       }
