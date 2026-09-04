@@ -223,10 +223,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     };
   }, [getEthereumProvider, address]);
 
-  // Auto-connect on mount if session exists in localStorage
+  // Auto-connect on mount: check localStorage session AND silently check injected wallet
   useEffect(() => {
     const savedAddress = localStorage.getItem('user-address');
     const savedChainId = localStorage.getItem('user-chain-id');
+
     if (savedAddress) {
       setAddress(savedAddress);
       setIsConnected(true);
@@ -234,21 +235,38 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       if (savedChainId) {
         setChainId(parseInt(savedChainId, 10));
       }
+    }
 
-      // Check silently if wallet switched to a DIFFERENT address (do NOT disconnect if empty)
-      const provider = getEthereumProvider();
-      if (provider) {
-        provider.request({ method: 'eth_accounts' })
-          .then((accounts: any) => {
-            if (accounts && accounts.length > 0) {
-              const currentAddr = accounts[0];
-              if (currentAddr.toLowerCase() !== savedAddress.toLowerCase()) {
-                disconnectWallet();
+    // Silently check if an injected wallet account (e.g. Bitget / MetaMask / Trust) is already available
+    const provider = getEthereumProvider();
+    if (provider) {
+      provider
+        .request({ method: 'eth_accounts' })
+        .then(async (accounts: any) => {
+          if (accounts && accounts.length > 0) {
+            const currentAddr = sanitizeAndChecksumAddress(accounts[0]);
+            setAddress(currentAddr);
+            setIsConnected(true);
+            setAuthStep('authenticated');
+            localStorage.setItem('user-address', currentAddr);
+
+            try {
+              const chainIdHex = await provider.request({ method: 'eth_chainId' });
+              if (chainIdHex) {
+                const cid = parseInt(chainIdHex, 16);
+                setChainId(cid);
+                localStorage.setItem('user-chain-id', cid.toString());
               }
-            }
-          })
-          .catch(() => {});
-      }
+            } catch {}
+
+            fetchWalletBalances(provider, currentAddr).then(({ ethBalance: eb, usdtBalance: ub }) => {
+              setEthBalance(eb);
+              setUsdtBalance(ub);
+              syncUserToFirestore(currentAddr, eb, ub);
+            });
+          }
+        })
+        .catch(() => {});
     }
   }, [getEthereumProvider]);
 

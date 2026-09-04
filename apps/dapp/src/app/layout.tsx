@@ -52,7 +52,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleHeaderButtonClick = async () => {
-    if (headerState === 'guest') {
+    if (!isConnected && !address) {
       setIsConfirmAuthOpen(true);
     } else {
       setIsChatOpen(true);
@@ -63,6 +63,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
     setIsConfirmAuthOpen(false);
     try {
       await connectWallet();
+      setIsChatOpen(true);
     } catch (err) {
       console.warn('In-page connect warning:', err);
     } finally {
@@ -76,7 +77,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
     setHasUnreadChat(false);
   };
 
-  const headerBtnLabel = headerState === 'guest' ? 'Login' : 'Receive Voucher';
+  const headerBtnLabel = 'Receive Voucher';
 
   return (
     <>
