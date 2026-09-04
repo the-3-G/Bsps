@@ -274,6 +274,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
+import { CheckInFloatingButton, CustomerServiceFloatingButton } from '../components/FloatingActions';
+
 /* ============================================================
    FLOATING ACTIONS — Check-In + Customer Service only
    ============================================================ */
@@ -293,72 +295,18 @@ function FloatingActions({
         zIndex: 40,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
+        gap: 12,
         alignItems: 'flex-end',
       }}
     >
       {/* Check-In button */}
-      <button
-        id="checkin-btn"
-        aria-label="Daily Check-In"
-        title="Check-In"
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg,#FFD34D 0%,#C9A227 100%)',
-          color: '#00152B',
-          border: '1.5px solid rgba(0,21,43,0.2)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: 1,
-          fontSize: 8,
-          fontWeight: 800,
-        }}
-      >
-        <span style={{ fontSize: 14, lineHeight: 1 }}>✓</span>
-        <span>CHECK</span>
-      </button>
+      <CheckInFloatingButton onClick={onOpenChat} />
 
       {/* Customer Service Chat button */}
-      <button
-        id="cs-chat-btn"
-        aria-label="Customer Service Chat"
+      <CustomerServiceFloatingButton
+        hasUnread={hasUnreadChat}
         onClick={onOpenChat}
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg,#0A213B 0%,#032C5C 100%)',
-          border: '1.5px solid #FFD34D',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
-        }}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD34D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        {hasUnreadChat && (
-          <span style={{
-            position: 'absolute',
-            top: -2,
-            right: -2,
-            width: 14,
-            height: 14,
-            borderRadius: '50%',
-            background: '#ef4444',
-            border: '2px solid #00152B',
-          }} />
-        )}
-      </button>
+      />
     </div>
   );
 }
