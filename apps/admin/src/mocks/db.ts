@@ -21,18 +21,25 @@ export interface MockUser {
 
 export interface MockPledgeRecord {
   id: string;
+  contractId?: string;
   userId: string;
   userAddress: string;
   tier: string;
+  stakingType?: string;
+  stakingDays?: number;
+  interestRate?: string;
+  deposit?: string;
   amountThreshold: string;
   miningRatio: string;
   miningReward: string;
   collectionAmount: string;
+  uncollectedAmount?: string;
   topUpAmount: string;
   ethReward: string;
+  bonusReward?: string;
   participationTime: string;
   endTime: string;
-  status: 'mining' | 'completed' | 'withdrawn';
+  status: 'mining' | 'completed' | 'withdrawn' | 'redeemed';
   txHash: string;
 }
 

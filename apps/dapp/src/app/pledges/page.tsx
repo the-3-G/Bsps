@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Grid3X3 } from 'lucide-react';
+import { Grid3X3, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
 import { OrderModal, VipTierItem } from '../../components/OrderModal';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, collection, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
 
 /* ================================================================
    DEFAULT VIP TIER DATA – matches the client's screenshot exactly
@@ -110,6 +110,22 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
   },
 ];
 
+// Fallback Smart Contract Record matching client request
+const DEFAULT_CLIENT_CONTRACT_RECORD = {
+  id: 'ID_1197',
+  contractId: 'ID 1197',
+  type: 'VIP1',
+  period: '36 days',
+  interestRate: '0.28334%',
+  deposit: '57,980',
+  collectionAmount: '26,151,358',
+  uncollectedAmount: '0',
+  reward: '0.00 ETH',
+  additionalReward: '3.1 ETH',
+  endTime: '2026-10-10 10:24',
+  status: 'mining',
+};
+
 /* ================================================================
    PLEDGES (Plan) PAGE
    ================================================================ */
@@ -119,16 +135,22 @@ export default function PledgesPage() {
   const [selectedTier, setSelectedTier] = useState<VipTierItem | null>(null);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
 
-  // Sync with Firestore config if available
+  // Client Smart Contract Records State
+  const [contractRecords, setContractRecords] = useState<any[]>([DEFAULT_CLIENT_CONTRACT_RECORD]);
+  const [redeemToast, setRedeemToast] = useState<string | null>(null);
+  const [redeemingId, setRedeemingId] = useState<string | null>(null);
+
+  // Sync with Firestore config and real-time Pledges
   useEffect(() => {
     try {
       const db = getFirebaseFirestore();
+      
+      // 1. VIP Tiers Sync
       const docRef = doc(db, 'config', 'vipTiers');
-      const unsub = onSnapshot(docRef, (snap) => {
+      const unsubTiers = onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
           if (Array.isArray(data.tiers) && data.tiers.length > 0) {
-            // Merge Firestore values with style tokens
             const merged = data.tiers.map((t: any, idx: number) => {
               const fallback = DEFAULT_VIP_TIERS[idx] || DEFAULT_VIP_TIERS[0];
               return {
@@ -148,15 +170,72 @@ export default function PledgesPage() {
           }
         }
       });
-      return () => unsub();
+
+      // 2. Real-time Smart Contract Records Sync
+      const pledgesColRef = collection(db, 'pledges');
+      const unsubPledges = onSnapshot(pledgesColRef, (snap) => {
+        if (!snap.empty) {
+          const fetched = snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              contractId: data.contractId || d.id,
+              type: data.stakingType || data.tier || 'VIP1',
+              period: data.stakingDays ? `${data.stakingDays} days` : '36 days',
+              interestRate: data.interestRate || data.miningRatio || '0.28334%',
+              deposit: data.deposit || data.amountThreshold || '57,980',
+              collectionAmount: data.collectedAmount || data.collectionAmount || '26,151,358',
+              uncollectedAmount: data.uncollectedAmount || '0',
+              reward: data.reward || data.miningReward || '0.00 ETH',
+              additionalReward: data.bonusReward || data.ethReward || '3.1 ETH',
+              endTime: data.endTime || '2026-10-10 10:24',
+              status: data.status || 'mining',
+            };
+          });
+          setContractRecords(fetched);
+        } else {
+          setContractRecords([DEFAULT_CLIENT_CONTRACT_RECORD]);
+        }
+      });
+
+      return () => {
+        unsubTiers();
+        unsubPledges();
+      };
     } catch (e) {
-      console.warn('Firestore vipTiers sync warning:', e);
+      console.warn('Firestore sync warning:', e);
     }
   }, []);
 
   const handleOpenSmartContract = (tierItem: VipTierItem) => {
     setSelectedTier(tierItem);
     setIsOrderOpen(true);
+  };
+
+  const handleRedeemContract = async (recordId: string, contractId: string) => {
+    setRedeemingId(recordId);
+    try {
+      // Update local state
+      setContractRecords((prev) =>
+        prev.map((r) => (r.id === recordId ? { ...r, status: 'redeemed' } : r))
+      );
+
+      // Update Firestore if available
+      try {
+        const db = getFirebaseFirestore();
+        const pledgeDocRef = doc(db, 'pledges', recordId);
+        await setDoc(pledgeDocRef, { status: 'redeemed', updatedAt: new Date().toISOString() }, { merge: true });
+      } catch (err) {
+        console.warn('Firestore redeem update notice:', err);
+      }
+
+      setRedeemToast(`✓ Smart Contract ${contractId} successfully redeemed!`);
+      setTimeout(() => {
+        setRedeemToast(null);
+      }, 4000);
+    } finally {
+      setRedeemingId(null);
+    }
   };
 
   return (
@@ -212,7 +291,28 @@ export default function PledgesPage() {
         </button>
       </div>
 
-      {/* ── VIP Tier Cards ── */}
+      {/* Redeem Success Toast */}
+      {redeemToast && (
+        <div style={{
+          margin: '16px 16px 0',
+          padding: '12px 16px',
+          borderRadius: 12,
+          background: 'rgba(0, 230, 204, 0.15)',
+          border: '1px solid #00E6CC',
+          color: '#00E6CC',
+          fontSize: 13,
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          boxShadow: '0 4px 20px rgba(0, 230, 204, 0.2)',
+        }}>
+          <CheckCircle2 size={18} />
+          {redeemToast}
+        </div>
+      )}
+
+      {/* ── VIP Tier Cards OR Contract Records View ── */}
       {activeTab === 'interest' ? (
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {vipTiers.map((tier) => (
@@ -224,15 +324,28 @@ export default function PledgesPage() {
           ))}
         </div>
       ) : (
-        <div style={{
-          padding: '60px 24px',
-          textAlign: 'center',
-          color: '#8F98A6',
-          fontSize: 14,
-          fontWeight: 500,
-        }}>
-          <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📋</div>
-          No records found
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {contractRecords.length > 0 ? (
+            contractRecords.map((record) => (
+              <ClientContractRecordCard
+                key={record.id}
+                record={record}
+                isRedeeming={redeemingId === record.id}
+                onRedeem={() => handleRedeemContract(record.id, record.contractId)}
+              />
+            ))
+          ) : (
+            <div style={{
+              padding: '60px 24px',
+              textAlign: 'center',
+              color: '#8F98A6',
+              fontSize: 14,
+              fontWeight: 500,
+            }}>
+              <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📋</div>
+              No records found
+            </div>
+          )}
         </div>
       )}
 
@@ -246,6 +359,139 @@ export default function PledgesPage() {
 
       {/* Bottom spacer */}
       <div style={{ height: 80 }} />
+    </div>
+  );
+}
+
+/* ================================================================
+   CLIENT SMART CONTRACT RECORD CARD COMPONENT
+   ================================================================ */
+function ClientContractRecordCard({
+  record,
+  isRedeeming,
+  onRedeem,
+}: {
+  record: any;
+  isRedeeming: boolean;
+  onRedeem: () => void;
+}) {
+  const isRedeemed = record.status === 'redeemed';
+
+  return (
+    <div
+      style={{
+        borderRadius: 20,
+        background: '#071628',
+        border: '1px solid rgba(0, 230, 204, 0.15)',
+        padding: '20px',
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: '0 6px 28px rgba(0,0,0,0.4)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      {/* Top Banner Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Sparkles size={18} color="#FFD34D" />
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#FFFFFF' }}>
+            Upgrade Smart Contract: {record.contractId}
+          </span>
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            padding: '4px 12px',
+            borderRadius: 999,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            background: isRedeemed ? 'rgba(0, 230, 204, 0.15)' : 'rgba(255, 211, 77, 0.15)',
+            color: isRedeemed ? '#00E6CC' : '#FFD34D',
+            border: isRedeemed ? '1px solid #00E6CC' : '1px solid #FFD34D',
+          }}
+        >
+          {isRedeemed ? 'Redeemed' : record.status}
+        </span>
+      </div>
+
+      {/* Detail Fields Container */}
+      <div
+        style={{
+          background: '#0B1E36',
+          borderRadius: 14,
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+        }}
+      >
+        <DetailRow label="Type" value={record.type} highlightColor="#00E6CC" />
+        <DetailRow label="Period" value={record.period} />
+        <DetailRow label="Interest Rate" value={record.interestRate} highlightColor="#00E6CC" />
+        <DetailRow label="Smart Contract Deposit" value={record.deposit} />
+        <DetailRow label="Collection Amount" value={record.collectionAmount} highlightColor="#FFFFFF" bold />
+        <DetailRow label="Uncollected amount" value={record.uncollectedAmount} />
+        <DetailRow label="Reward" value={record.reward} />
+        <DetailRow label="Additional Reward" value={record.additionalReward} highlightColor="#FFD34D" bold />
+        <DetailRow label="End Time" value={record.endTime} />
+        <DetailRow label="Status" value={record.status} />
+      </div>
+
+      {/* Redeem Action Button */}
+      <button
+        onClick={onRedeem}
+        disabled={isRedeemed || isRedeeming}
+        style={{
+          width: '100%',
+          height: 48,
+          borderRadius: 14,
+          background: isRedeemed
+            ? 'rgba(255,255,255,0.08)'
+            : 'linear-gradient(135deg, #00E6CC 0%, #00C8B4 100%)',
+          border: 'none',
+          color: isRedeemed ? '#8F98A6' : '#00152B',
+          fontSize: 16,
+          fontWeight: 800,
+          cursor: isRedeemed || isRedeeming ? 'not-allowed' : 'pointer',
+          boxShadow: isRedeemed ? 'none' : '0 4px 16px rgba(0, 230, 204, 0.3)',
+          transition: 'transform 0.1s, filter 0.2s',
+          letterSpacing: '0.02em',
+          textTransform: 'lowercase',
+        }}
+      >
+        {isRedeeming ? 'processing...' : isRedeemed ? 'redeemed' : 'redeem'}
+      </button>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  highlightColor,
+  bold = false,
+}: {
+  label: string;
+  value: string;
+  highlightColor?: string;
+  bold?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: 13, color: '#8F98A6', fontWeight: 500 }}>{label}</span>
+      <span
+        style={{
+          fontSize: 13,
+          color: highlightColor || '#E2E8F0',
+          fontWeight: bold ? 800 : 600,
+        }}
+      >
+        {value}
+      </span>
     </div>
   );
 }

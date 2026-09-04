@@ -35,6 +35,7 @@ import {
   mockOptionOrders,
   mockNFTOrders,
   mockMiningRecords,
+  MockPledgeRecord,
 } from '../mocks/db';
 
 function isHiddenUser(user: any): boolean {
@@ -146,6 +147,7 @@ export class MockPledgeRepository implements IPledgeRepository {
   async listPledges(): Promise<DbPledge[]> {
     return mockPledges.map((p) => ({
       pledgeId: p.id,
+      contractId: p.contractId || p.id,
       userUid: p.userId,
       walletAddress: p.userAddress,
       chainId: 1,
@@ -155,12 +157,55 @@ export class MockPledgeRepository implements IPledgeRepository {
       principalBaseUnits: p.amountThreshold,
       rewardRateReference: p.miningRatio,
       tier: p.tier,
+      stakingType: p.stakingType || p.tier,
+      stakingDays: p.stakingDays || 30,
+      interestRate: p.interestRate || p.miningRatio,
+      deposit: p.deposit || p.amountThreshold,
+      collectedAmount: p.collectionAmount,
+      uncollectedAmount: p.uncollectedAmount || '0',
+      reward: p.miningReward,
+      bonusReward: p.bonusReward || p.ethReward,
       startAt: p.participationTime,
       endAt: p.endTime,
+      endTime: p.endTime,
       status: p.status,
       createdAt: p.participationTime,
       updatedAt: p.participationTime,
     }));
+  }
+
+  async createOrUpdatePledge(pledge: Partial<DbPledge>): Promise<string> {
+    const id = pledge.pledgeId || pledge.contractId || `ID_${Math.floor(1000 + Math.random() * 9000)}`;
+    const existingIdx = mockPledges.findIndex((p) => p.id === id || p.contractId === id);
+    const newRecord: MockPledgeRecord = {
+      id,
+      contractId: pledge.contractId || id,
+      userId: pledge.userUid || 'u-1001',
+      userAddress: pledge.walletAddress || '0x71C...39A2',
+      tier: pledge.tier || pledge.stakingType || 'VIP1',
+      stakingType: pledge.stakingType || 'VIP1',
+      stakingDays: pledge.stakingDays || 36,
+      interestRate: pledge.interestRate || '0.28334%',
+      deposit: pledge.deposit || pledge.principalBaseUnits || '57,980',
+      amountThreshold: pledge.deposit || pledge.principalBaseUnits || '57,980',
+      miningRatio: pledge.interestRate || '0.28334%',
+      miningReward: pledge.reward || '0 ETH',
+      collectionAmount: pledge.collectedAmount || '26,151,358',
+      uncollectedAmount: pledge.uncollectedAmount || '0',
+      topUpAmount: '0',
+      ethReward: pledge.bonusReward || '3.1 ETH',
+      bonusReward: pledge.bonusReward || '3.1 ETH',
+      participationTime: pledge.createdAt || new Date().toISOString(),
+      endTime: pledge.endTime || pledge.endAt || new Date(Date.now() + 36 * 86400000).toISOString(),
+      status: pledge.status || 'mining',
+      txHash: pledge.transactionHash || '0x' + Math.random().toString(16).slice(2, 10),
+    };
+    if (existingIdx !== -1) {
+      mockPledges[existingIdx] = { ...mockPledges[existingIdx], ...newRecord };
+    } else {
+      mockPledges.unshift(newRecord);
+    }
+    return id;
   }
 }
 

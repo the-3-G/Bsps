@@ -60,20 +60,30 @@ export interface DbReferralEdge {
 
 export interface DbPledge {
   pledgeId: string;
+  contractId?: string;
   userUid: string;
   walletAddress: string;
-  chainId: number;
-  contractAddress: string;
-  tokenAddress: string;
-  transactionHash: string;
-  principalBaseUnits: string; // token amounts stored as base-unit strings
-  rewardRateReference: string;
-  tier: string;
-  startAt: string;
-  endAt: string;
-  status: 'mining' | 'completed' | 'withdrawn';
+  chainId?: number;
+  contractAddress?: string;
+  tokenAddress?: string;
+  transactionHash?: string;
+  principalBaseUnits?: string; // token amounts stored as base-unit strings
+  rewardRateReference?: string;
+  tier?: string;
+  stakingType?: string;
+  stakingDays?: number;
+  interestRate?: string;
+  deposit?: string;
+  collectedAmount?: string;
+  uncollectedAmount?: string;
+  reward?: string;
+  bonusReward?: string;
+  startAt?: string;
+  endAt?: string;
+  endTime?: string;
+  status: 'mining' | 'completed' | 'withdrawn' | 'redeemed';
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface DbRewardRecord {
@@ -241,6 +251,7 @@ export interface IWithdrawalRepository {
 
 export interface IPledgeRepository {
   listPledges(): Promise<DbPledge[]>;
+  createOrUpdatePledge?(pledge: Partial<DbPledge>): Promise<string>;
 }
 
 export interface ILoanRepository {

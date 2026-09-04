@@ -190,6 +190,21 @@ export class FirebasePledgeRepository implements IPledgeRepository {
     const snap = await getDocs(colRef);
     return snap.docs.map((doc: QueryDocumentSnapshot) => ({ pledgeId: doc.id, ...doc.data() } as DbPledge));
   }
+
+  async createOrUpdatePledge(pledge: Partial<DbPledge>): Promise<string> {
+    const db = getFirebaseFirestore();
+    const { doc, setDoc } = await import('firebase/firestore');
+    const pledgeId = pledge.pledgeId || pledge.contractId || `pledge_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const docRef = doc(db, 'pledges', pledgeId);
+    const dataToSave = {
+      ...pledge,
+      pledgeId,
+      updatedAt: new Date().toISOString(),
+      createdAt: pledge.createdAt || new Date().toISOString(),
+    };
+    await setDoc(docRef, dataToSave, { merge: true });
+    return pledgeId;
+  }
 }
 
 export class FirebaseLoginEventRepository implements ILoginEventRepository {
