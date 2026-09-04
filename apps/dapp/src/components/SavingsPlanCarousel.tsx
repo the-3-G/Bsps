@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { GoldenEagle } from './GoldenEagle';
 
 export interface SavingsPlanRow {
@@ -51,12 +51,12 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
   };
 
   const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current) return;
+    if (touchStartX.current === null || touchEndX.current === null) return;
     const distance = touchStartX.current - touchEndX.current;
-    if (distance > 50) {
+    if (distance > 40) {
       // Swiped Left -> go to slide 1
       setActiveSlide(1);
-    } else if (distance < -50) {
+    } else if (distance < -40) {
       // Swiped Right -> go to slide 0
       setActiveSlide(0);
     }
@@ -84,6 +84,7 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
         maxWidth: 480,
         margin: '0 auto',
         padding: '0 8px',
+        boxSizing: 'border-box',
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -94,29 +95,34 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
         style={{
           background: 'linear-gradient(180deg, #07152B 0%, #030B17 100%)',
           borderRadius: 24,
-          padding: '24px 18px 20px',
+          padding: 0,
           border: '1px solid rgba(255, 211, 77, 0.16)',
           boxShadow: '0 8px 36px rgba(0, 0, 0, 0.55)',
           position: 'relative',
           overflow: 'hidden',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
-        {/* Slide Carousel Container */}
+        {/* Slide Carousel Track */}
         <div
           style={{
             display: 'flex',
-            width: '200%',
-            transform: `translateX(-${activeSlide * 50}%)`,
+            width: '100%',
+            transform: `translateX(-${activeSlide * 100}%)`,
             transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
+            willChange: 'transform',
           }}
         >
           {plans.map((plan) => (
             <div
               key={plan.type}
               style={{
-                width: '50%',
-                flexShrink: 0,
-                padding: '0 4px',
+                flex: '0 0 100%',
+                width: '100%',
+                minWidth: '100%',
+                maxWidth: '100%',
+                padding: '24px 20px 14px',
                 boxSizing: 'border-box',
               }}
             >
@@ -139,7 +145,7 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
               <div
                 style={{
                   width: '100%',
-                  marginBottom: 24,
+                  marginBottom: 20,
                 }}
               >
                 {/* Table Header */}
@@ -233,7 +239,7 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
                   justifyContent: 'center',
                   alignItems: 'center',
                   marginTop: 10,
-                  marginBottom: 16,
+                  marginBottom: 14,
                 }}
               >
                 <GoldenEagle width={260} height={92} />
@@ -246,7 +252,7 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
                   color: '#FFD34D',
                   fontSize: 13,
                   fontWeight: 600,
-                  margin: '0 0 20px',
+                  margin: '0 0 10px',
                   letterSpacing: '0.01em',
                 }}
               >
@@ -263,7 +269,8 @@ export function SavingsPlanCarousel({ onSelectTier, defaultSlide = 0 }: SavingsP
             justifyContent: 'center',
             alignItems: 'center',
             gap: 8,
-            paddingTop: 4,
+            paddingBottom: 18,
+            paddingTop: 2,
           }}
         >
           {plans.map((_, idx) => {
