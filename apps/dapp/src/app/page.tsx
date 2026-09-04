@@ -4,14 +4,13 @@ import React from 'react';
 
 // ── BATCH 1 ─────────────────────────────────────
 import { HomeHero } from '../components/home/HomeHero';
-import { FlexibleSavingsSection } from '../components/home/FlexibleSavingsSection';
+import { UnifiedSavingsPlanSection } from '../components/home/UnifiedSavingsPlanSection';
 import { MarketReferenceSection } from '../components/home/MarketReferenceSection';
 
 // ── BATCH 2 ─────────────────────────────────────
 import { ComputingPoolSection } from '../components/home/ComputingPoolSection';
 import { OutputSection } from '../components/home/OutputSection';
 import { DailyInterestSection } from '../components/home/DailyInterestSection';
-import { FixedTermSavingsSection } from '../components/home/FixedTermSavingsSection';
 
 // ── BATCH 3 ─────────────────────────────────────
 import { WalletSupportSection } from '../components/home/WalletSupportSection';
@@ -31,15 +30,16 @@ export default function HomePage() {
       {/* ── Hero Carousel ─────────────────────────── */}
       <HomeHero />
 
-      {/* ── Savings Products ──────────────────────── */}
-      <FlexibleSavingsSection />
+      {/* ── Unified Horizontally Scrollable Savings Plans ── */}
+      <UnifiedSavingsPlanSection />
+
+      {/* ── Market Live Rates ─────────────────────── */}
       <MarketReferenceSection />
 
       {/* ── Network Activity ──────────────────────── */}
       <ComputingPoolSection />
       <OutputSection />
       <DailyInterestSection />
-      <FixedTermSavingsSection />
 
       {/* ── Ecosystem Education ───────────────────── */}
       <WalletSupportSection />
