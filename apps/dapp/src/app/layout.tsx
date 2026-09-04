@@ -19,8 +19,8 @@ const AUTH_ROUTES = ['/dashboard', '/assets', '/pledges', '/referrals', '/withdr
 const HEADER_NAV_ITEMS = [
   { label: 'Home',      href: '/' },
   { label: 'NFT',       href: '/assets' },
-  { label: 'Trading',   href: '/dashboard' },
-  { label: 'Pool Data', href: '/pledges' },
+  { label: 'Pool Data', href: '/dashboard' },
+  { label: 'Plan',      href: '/pledges' },
   { label: 'Loan',      href: '/loan' },
   { label: 'Paper',     href: '/referrals' },
 ];
