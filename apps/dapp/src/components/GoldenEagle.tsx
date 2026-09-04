@@ -3,7 +3,7 @@ import React from 'react';
 export function GoldenEagle({
   className = '',
   style = {},
-  width = 240,
+  width = 280,
   height = 95,
 }: {
   className?: string;
@@ -13,7 +13,7 @@ export function GoldenEagle({
 }) {
   return (
     <svg
-      viewBox="0 0 340 130"
+      viewBox="0 0 400 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -23,133 +23,149 @@ export function GoldenEagle({
         maxWidth: '100%',
         display: 'block',
         margin: '0 auto',
+        filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.35))',
         ...style,
       }}
     >
-      {/* Golden Eagle Graphic Silhouette */}
       <g fill="#FFD34D">
-        {/* Head & Beak Profile */}
-        <path d="M162 30 C160 25, 163 18, 168 15 C172 13, 175 15, 176 19 C179 17, 182 18, 182 23 C182 28, 177 34, 170 34 Z" />
-        <path d="M160 20 Q153 22 150 26 Q156 28 162 26 Z" />
-        <circle cx="167" cy="20" r="1.8" fill="#0A192F" />
+        {/* ── 1. EAGLE HEAD & NECK (Facing Left) ── */}
+        {/* Crown & Head Profile */}
+        <path d="M 194 28 C 190 20, 194 13, 201 10 C 206 8, 210 10, 212 14 C 215 12, 219 13, 219 18 C 219 23, 213 29, 204 29 Z" />
+        {/* Hooked Beak */}
+        <path d="M 192 16 C 183 17, 180 22, 182 25 C 185 24, 189 23, 194 23 Z" />
+        {/* Eye cutout */}
+        <circle cx="200" cy="16" r="1.8" fill="#07152B" />
 
-        {/* ── TOP HORIZONTAL WING BARS ── */}
+        {/* ── 2. UPPER WING SOLID BARS ── */}
         {/* Left Wing Top Bar */}
-        <path d="M28 42 L160 42 L160 47 L30 47 Q24 44 28 42 Z" />
+        <path d="M 30 36 L 192 36 L 192 41 L 32 41 C 28 39, 28 37, 30 36 Z" />
         {/* Right Wing Top Bar */}
-        <path d="M180 42 L312 42 Q316 44 310 47 L180 47 L180 42 Z" />
+        <path d="M 208 36 L 370 36 C 372 37, 372 39, 368 41 L 208 41 Z" />
 
-        {/* ── SECOND HORIZONTAL WING BARS ── */}
-        <path d="M36 50 L160 50 L160 55 L42 55 L36 50 Z" />
-        <path d="M180 50 L304 50 L298 55 L180 55 Z" />
+        {/* ── 3. LEFT WING FEATHER TIER 1 (Top Slots) ── */}
+        <rect x="42" y="44" width="7" height="4" rx="1" />
+        <rect x="54" y="44" width="7" height="4" rx="1" />
+        <rect x="66" y="44" width="7" height="4" rx="1" />
+        <rect x="78" y="44" width="7" height="4" rx="1" />
+        <rect x="90" y="44" width="7" height="4" rx="1" />
+        <rect x="102" y="44" width="7" height="4" rx="1" />
+        <rect x="114" y="44" width="7" height="4" rx="1" />
+        <rect x="126" y="44" width="7" height="4" rx="1" />
+        <rect x="138" y="44" width="7" height="4" rx="1" />
+        <rect x="150" y="44" width="7" height="4" rx="1" />
+        <rect x="162" y="44" width="7" height="4" rx="1" />
+        <rect x="174" y="44" width="7" height="4" rx="1" />
 
-        {/* ── THIRD HORIZONTAL WING BARS ── */}
-        <path d="M48 58 L160 58 L160 63 L56 63 L48 58 Z" />
-        <path d="M180 58 L292 58 L284 63 L180 63 Z" />
+        {/* ── 3. RIGHT WING FEATHER TIER 1 (Top Slots) ── */}
+        <rect x="219" y="44" width="7" height="4" rx="1" />
+        <rect x="231" y="44" width="7" height="4" rx="1" />
+        <rect x="243" y="44" width="7" height="4" rx="1" />
+        <rect x="255" y="44" width="7" height="4" rx="1" />
+        <rect x="267" y="44" width="7" height="4" rx="1" />
+        <rect x="279" y="44" width="7" height="4" rx="1" />
+        <rect x="291" y="44" width="7" height="4" rx="1" />
+        <rect x="303" y="44" width="7" height="4" rx="1" />
+        <rect x="315" y="44" width="7" height="4" rx="1" />
+        <rect x="327" y="44" width="7" height="4" rx="1" />
+        <rect x="339" y="44" width="7" height="4" rx="1" />
+        <rect x="351" y="44" width="7" height="4" rx="1" />
 
-        {/* ── FOURTH HORIZONTAL WING BARS ── */}
-        <path d="M62 66 L160 66 L160 71 L72 71 L62 66 Z" />
-        <path d="M180 66 L278 66 L268 71 L180 71 Z" />
+        {/* ── 4. MIDDLE HORIZONTAL BARS ── */}
+        <path d="M 46 51 L 192 51 L 192 54 L 48 54 Z" />
+        <path d="M 208 51 L 354 51 L 352 54 L 208 54 Z" />
 
-        {/* ── FIFTH HORIZONTAL WING BARS ── */}
-        <path d="M80 74 L160 74 L160 79 L92 79 L80 74 Z" />
-        <path d="M180 74 L260 74 L248 79 L180 79 Z" />
+        {/* ── 5. LEFT WING FEATHER TIER 2 (Middle Slots) ── */}
+        <rect x="52" y="57" width="7" height="4.5" rx="1" />
+        <rect x="64" y="57" width="7" height="4.5" rx="1" />
+        <rect x="76" y="57" width="7" height="4.5" rx="1" />
+        <rect x="88" y="57" width="7" height="4.5" rx="1" />
+        <rect x="100" y="57" width="7" height="4.5" rx="1" />
+        <rect x="112" y="57" width="7" height="4.5" rx="1" />
+        <rect x="124" y="57" width="7" height="4.5" rx="1" />
+        <rect x="136" y="57" width="7" height="4.5" rx="1" />
+        <rect x="148" y="57" width="7" height="4.5" rx="1" />
+        <rect x="160" y="57" width="7" height="4.5" rx="1" />
+        <rect x="172" y="57" width="7" height="4.5" rx="1" />
 
-        {/* ── FLIGHT FEATHER SLITS (ROW 1 Left) ── */}
-        <rect x="40" y="44" width="7" height="3" rx="1" />
-        <rect x="52" y="44" width="7" height="3" rx="1" />
-        <rect x="64" y="44" width="7" height="3" rx="1" />
-        <rect x="76" y="44" width="7" height="3" rx="1" />
-        <rect x="88" y="44" width="7" height="3" rx="1" />
-        <rect x="100" y="44" width="7" height="3" rx="1" />
-        <rect x="112" y="44" width="7" height="3" rx="1" />
-        <rect x="124" y="44" width="7" height="3" rx="1" />
-        <rect x="136" y="44" width="7" height="3" rx="1" />
-        <rect x="148" y="44" width="7" height="3" rx="1" />
+        {/* ── 5. RIGHT WING FEATHER TIER 2 (Middle Slots) ── */}
+        <rect x="221" y="57" width="7" height="4.5" rx="1" />
+        <rect x="233" y="57" width="7" height="4.5" rx="1" />
+        <rect x="245" y="57" width="7" height="4.5" rx="1" />
+        <rect x="257" y="57" width="7" height="4.5" rx="1" />
+        <rect x="269" y="57" width="7" height="4.5" rx="1" />
+        <rect x="281" y="57" width="7" height="4.5" rx="1" />
+        <rect x="293" y="57" width="7" height="4.5" rx="1" />
+        <rect x="305" y="57" width="7" height="4.5" rx="1" />
+        <rect x="317" y="57" width="7" height="4.5" rx="1" />
+        <rect x="329" y="57" width="7" height="4.5" rx="1" />
+        <rect x="341" y="57" width="7" height="4.5" rx="1" />
 
-        {/* ── FLIGHT FEATHER SLITS (ROW 1 Right) ── */}
-        <rect x="185" y="44" width="7" height="3" rx="1" />
-        <rect x="197" y="44" width="7" height="3" rx="1" />
-        <rect x="209" y="44" width="7" height="3" rx="1" />
-        <rect x="221" y="44" width="7" height="3" rx="1" />
-        <rect x="233" y="44" width="7" height="3" rx="1" />
-        <rect x="245" y="44" width="7" height="3" rx="1" />
-        <rect x="257" y="44" width="7" height="3" rx="1" />
-        <rect x="269" y="44" width="7" height="3" rx="1" />
-        <rect x="281" y="44" width="7" height="3" rx="1" />
-        <rect x="293" y="44" width="7" height="3" rx="1" />
+        {/* ── 6. LOWER HORIZONTAL BARS ── */}
+        <path d="M 62 64 L 192 64 L 192 67 L 66 67 Z" />
+        <path d="M 208 64 L 338 64 L 334 67 L 208 67 Z" />
 
-        {/* ── FLIGHT FEATHER SLITS (ROW 2 Left) ── */}
-        <rect x="50" y="52" width="7" height="3" rx="1" />
-        <rect x="62" y="52" width="7" height="3" rx="1" />
-        <rect x="74" y="52" width="7" height="3" rx="1" />
-        <rect x="86" y="52" width="7" height="3" rx="1" />
-        <rect x="98" y="52" width="7" height="3" rx="1" />
-        <rect x="110" y="52" width="7" height="3" rx="1" />
-        <rect x="122" y="52" width="7" height="3" rx="1" />
-        <rect x="134" y="52" width="7" height="3" rx="1" />
-        <rect x="146" y="52" width="7" height="3" rx="1" />
+        {/* ── 7. PRIMARY FLIGHT FEATHERS (LEFT WING) ── */}
+        <path d="M 68 70 L 64 78 L 71 78 L 74 70 Z" />
+        <path d="M 78 70 L 75 80 L 82 80 L 84 70 Z" />
+        <path d="M 88 70 L 86 82 L 93 82 L 94 70 Z" />
+        <path d="M 98 70 L 97 84 L 104 84 L 104 70 Z" />
+        <path d="M 108 70 L 108 85 L 115 85 L 114 70 Z" />
+        <path d="M 118 70 L 119 86 L 126 86 L 124 70 Z" />
+        <path d="M 128 70 L 130 87 L 137 87 L 134 70 Z" />
+        <path d="M 138 70 L 141 87 L 148 87 L 144 70 Z" />
+        <path d="M 148 70 L 152 87 L 159 87 L 154 70 Z" />
+        <path d="M 158 70 L 163 87 L 170 87 L 164 70 Z" />
+        <path d="M 168 70 L 174 86 L 181 86 L 174 70 Z" />
 
-        {/* ── FLIGHT FEATHER SLITS (ROW 2 Right) ── */}
-        <rect x="187" y="52" width="7" height="3" rx="1" />
-        <rect x="199" y="52" width="7" height="3" rx="1" />
-        <rect x="211" y="52" width="7" height="3" rx="1" />
-        <rect x="223" y="52" width="7" height="3" rx="1" />
-        <rect x="235" y="52" width="7" height="3" rx="1" />
-        <rect x="247" y="52" width="7" height="3" rx="1" />
-        <rect x="259" y="52" width="7" height="3" rx="1" />
-        <rect x="271" y="52" width="7" height="3" rx="1" />
-        <rect x="283" y="52" width="7" height="3" rx="1" />
+        {/* ── 7. PRIMARY FLIGHT FEATHERS (RIGHT WING) ── */}
+        <path d="M 226 70 L 219 86 L 226 86 L 232 70 Z" />
+        <path d="M 236 70 L 230 87 L 237 87 L 242 70 Z" />
+        <path d="M 246 70 L 241 87 L 248 87 L 252 70 Z" />
+        <path d="M 256 70 L 252 87 L 259 87 L 262 70 Z" />
+        <path d="M 266 70 L 263 87 L 270 87 L 272 70 Z" />
+        <path d="M 276 70 L 274 86 L 281 86 L 282 70 Z" />
+        <path d="M 286 70 L 285 85 L 292 85 L 292 70 Z" />
+        <path d="M 296 70 L 296 84 L 303 84 L 302 70 Z" />
+        <path d="M 306 70 L 307 82 L 314 82 L 312 70 Z" />
+        <path d="M 316 70 L 318 80 L 325 80 L 322 70 Z" />
+        <path d="M 326 70 L 329 78 L 336 78 L 332 70 Z" />
 
-        {/* ── FLIGHT FEATHER SLITS (ROW 3 Left) ── */}
-        <rect x="62" y="60" width="7" height="3" rx="1" />
-        <rect x="74" y="60" width="7" height="3" rx="1" />
-        <rect x="86" y="60" width="7" height="3" rx="1" />
-        <rect x="98" y="60" width="7" height="3" rx="1" />
-        <rect x="110" y="60" width="7" height="3" rx="1" />
-        <rect x="122" y="60" width="7" height="3" rx="1" />
-        <rect x="134" y="60" width="7" height="3" rx="1" />
-        <rect x="146" y="60" width="7" height="3" rx="1" />
+        {/* ── 8. EAGLE TORSO & BREAST (Centered) ── */}
+        <path d="M 191 30 Q 200 30 209 30 L 206 78 Q 200 84 194 78 Z" />
+        {/* Scalloped chest feather scales */}
+        <path d="M 194 38 Q 200 41 206 38 L 205 44 Q 200 47 195 44 Z" opacity="0.9" />
+        <path d="M 194 46 Q 200 49 206 46 L 205 52 Q 200 55 195 52 Z" opacity="0.9" />
+        <path d="M 194 54 Q 200 57 206 54 L 205 60 Q 200 63 195 60 Z" opacity="0.9" />
+        <path d="M 195 62 Q 200 65 205 62 L 204 68 Q 200 71 196 68 Z" opacity="0.9" />
+        <path d="M 196 70 Q 200 73 204 70 L 203 76 Q 200 79 197 76 Z" opacity="0.9" />
 
-        {/* ── FLIGHT FEATHER SLITS (ROW 3 Right) ── */}
-        <rect x="187" y="60" width="7" height="3" rx="1" />
-        <rect x="199" y="60" width="7" height="3" rx="1" />
-        <rect x="211" y="60" width="7" height="3" rx="1" />
-        <rect x="223" y="60" width="7" height="3" rx="1" />
-        <rect x="235" y="60" width="7" height="3" rx="1" />
-        <rect x="247" y="60" width="7" height="3" rx="1" />
-        <rect x="259" y="60" width="7" height="3" rx="1" />
-        <rect x="271" y="60" width="7" height="3" rx="1" />
+        {/* ── 9. TAIL FEATHERS (5 Fanned Blades) ── */}
+        {/* Far Left */}
+        <path d="M 192 78 L 178 102 L 186 103 L 195 82 Z" />
+        {/* Mid Left */}
+        <path d="M 195 80 L 190 107 L 198 108 L 200 84 Z" />
+        {/* Center Tail */}
+        <path d="M 199 82 L 200 111 L 205 111 L 203 82 Z" />
+        {/* Mid Right */}
+        <path d="M 202 84 L 204 108 L 212 107 L 207 80 Z" />
+        {/* Far Right */}
+        <path d="M 207 82 L 216 103 L 224 102 L 210 78 Z" />
 
-        {/* ── EAGLE TORSO & BREAST ── */}
-        <path d="M160 34 Q170 34 180 34 L177 82 Q170 88 163 82 Z" />
-        {/* Scalloped chest feathers */}
-        <path d="M163 42 Q170 45 177 42 L176 49 Q170 52 164 49 Z" opacity="0.9" />
-        <path d="M164 51 Q170 54 176 51 L175 58 Q170 61 165 58 Z" opacity="0.9" />
-        <path d="M165 60 Q170 63 175 60 L174 67 Q170 70 166 67 Z" opacity="0.9" />
-        <path d="M166 69 Q170 72 174 69 L173 76 Q170 79 167 76 Z" opacity="0.9" />
-
-        {/* ── TAIL FEATHERS ── */}
-        <path d="M160 84 L148 106 L156 107 L164 88 Z" />
-        <path d="M163 86 L159 111 L166 112 L168 88 Z" />
-        <path d="M168 88 L170 114 L176 113 L173 88 Z" />
-        <path d="M172 88 L174 111 L181 111 L177 86 Z" />
-        <path d="M176 84 L184 107 L192 106 L180 84 Z" />
-
-        {/* ── TALONS & LAUREL BRANCH ── */}
-        <ellipse cx="158" cy="85" rx="4" ry="3" />
-        <ellipse cx="182" cy="85" rx="4" ry="3" />
+        {/* ── 10. TALONS & LAUREL WREATH ── */}
+        <circle cx="188" cy="81" r="3.5" />
+        <circle cx="214" cy="81" r="3.5" />
+        {/* Horizontal Clutch Bar / Branch */}
         <path
-          d="M140 90 Q170 96 200 90"
+          d="M 166 86 Q 200 92 236 86"
           stroke="#FFD34D"
-          strokeWidth="3"
+          strokeWidth="3.5"
           strokeLinecap="round"
         />
-        {/* Branch / Leaves */}
-        <path d="M142 88 Q146 84 150 88" stroke="#FFD34D" strokeWidth="2" fill="none" />
-        <path d="M148 93 Q152 97 156 93" stroke="#FFD34D" strokeWidth="2" fill="none" />
-        <path d="M184 93 Q188 97 192 93" stroke="#FFD34D" strokeWidth="2" fill="none" />
-        <path d="M190 88 Q194 84 198 88" stroke="#FFD34D" strokeWidth="2" fill="none" />
+        {/* Laurel Leaves left & right */}
+        <path d="M 168 84 Q 173 79 178 84" stroke="#FFD34D" strokeWidth="2.5" fill="none" />
+        <path d="M 176 89 Q 181 94 186 89" stroke="#FFD34D" strokeWidth="2.5" fill="none" />
+        <path d="M 216 89 Q 221 94 226 89" stroke="#FFD34D" strokeWidth="2.5" fill="none" />
+        <path d="M 224 84 Q 229 79 234 84" stroke="#FFD34D" strokeWidth="2.5" fill="none" />
       </g>
     </svg>
   );
