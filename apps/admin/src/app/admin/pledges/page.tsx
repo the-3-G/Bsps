@@ -295,7 +295,7 @@ export default function PledgesPage() {
   });
 
   const [sortKey, setSortKey] = useState<keyof MockPledgeRecord>('id');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(8);
