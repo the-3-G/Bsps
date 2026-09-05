@@ -111,22 +111,54 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
   },
 ];
 
-// Fallback Smart Contract Record matching client request
-const DEFAULT_CLIENT_CONTRACT_RECORD = {
-  id: 'ID_1197',
-  contractId: 'ID 1197',
-  walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
-  type: 'VIP1',
-  period: '36 days',
-  interestRate: '0.28334%',
-  deposit: '57,980',
-  collectionAmount: '26,151,358',
-  uncollectedAmount: '0',
-  reward: '0.00 ETH',
-  additionalReward: '3.1 ETH',
-  endTime: '2026-10-10 10:24',
-  status: 'mining',
-};
+// Fallback Smart Contract Records matching client adjustments
+const DEFAULT_CLIENT_CONTRACT_RECORDS = [
+  {
+    id: 'p-17',
+    contractId: 'p-17',
+    walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
+    type: 'Tier A',
+    period: '30 days',
+    interestRate: '1.5%',
+    deposit: '57980',
+    collectionAmount: '51628.71954',
+    uncollectedAmount: '0',
+    reward: '0.00 ETH',
+    additionalReward: '3.1',
+    endTime: '2026-10-05 05:07',
+    status: 'completed',
+  },
+  {
+    id: 'p-16',
+    contractId: 'p-16',
+    walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
+    type: 'Tier A',
+    period: '30 days',
+    interestRate: '1.5%',
+    deposit: '57,980',
+    collectionAmount: '26,151,358',
+    uncollectedAmount: '0',
+    reward: '0.00 ETH',
+    additionalReward: '3.1 ETH',
+    endTime: '2026-09-24 21:00',
+    status: 'mining',
+  },
+  {
+    id: 'ID_1197',
+    contractId: 'ID 1197',
+    walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
+    type: 'VIP1',
+    period: '36 days',
+    interestRate: '0.28334%',
+    deposit: '57,980',
+    collectionAmount: '26,151,358',
+    uncollectedAmount: '0',
+    reward: '0.00 ETH',
+    additionalReward: '3.1 ETH',
+    endTime: '2026-10-10 10:24',
+    status: 'mining',
+  },
+];
 
 function formatContractTitle(contractId?: string): string {
   if (!contractId) return 'ID 1197';
@@ -148,7 +180,7 @@ export default function PledgesPage() {
   const [isOrderOpen, setIsOrderOpen] = useState(false);
 
   // Client Smart Contract Records State
-  const [allContractRecords, setAllContractRecords] = useState<any[]>([DEFAULT_CLIENT_CONTRACT_RECORD]);
+  const [allContractRecords, setAllContractRecords] = useState<any[]>(DEFAULT_CLIENT_CONTRACT_RECORDS);
   const [redeemToast, setRedeemToast] = useState<string | null>(null);
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
 
@@ -193,7 +225,7 @@ export default function PledgesPage() {
               id: d.id,
               contractId: data.contractId || d.id,
               walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
-              userId: data.userUid || data.userId || '',
+              userId: (data.userUid || data.userId || '').toLowerCase(),
               type: data.stakingType || data.tier || 'VIP1',
               period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
               interestRate: data.interestRate || data.miningRatio || '0.28334%',
@@ -210,7 +242,7 @@ export default function PledgesPage() {
           });
           setAllContractRecords(fetched);
         } else {
-          setAllContractRecords([DEFAULT_CLIENT_CONTRACT_RECORD]);
+          setAllContractRecords(DEFAULT_CLIENT_CONTRACT_RECORDS);
         }
       });
 
@@ -226,14 +258,21 @@ export default function PledgesPage() {
   // Filter contract records for the connected user or fallback
   const userContractRecords = useMemo(() => {
     if (!allContractRecords || allContractRecords.length === 0) {
-      return [DEFAULT_CLIENT_CONTRACT_RECORD];
+      return DEFAULT_CLIENT_CONTRACT_RECORDS;
     }
 
     if (address) {
       const userAddr = address.toLowerCase();
       const matched = allContractRecords.filter((r) => {
         const rAddr = (r.walletAddress || '').toLowerCase();
-        return rAddr === userAddr || rAddr.includes(userAddr) || userAddr.includes(rAddr);
+        const rUid = (r.userId || '').toLowerCase();
+        return (
+          rAddr === userAddr ||
+          rAddr.includes(userAddr) ||
+          userAddr.includes(rAddr) ||
+          rUid === userAddr ||
+          rUid.includes(userAddr)
+        );
       });
       if (matched.length > 0) {
         return matched;

@@ -67,6 +67,15 @@ export function validateFirebaseConfig(): FirebaseClientConfig {
   };
 }
 
+export const DEFAULT_FIREBASE_CONFIG: FirebaseClientConfig = {
+  apiKey: 'AIzaSyA4j2To1oFlDmFiBiluPlkWSA_0DV2mWEo',
+  authDomain: 'bspc-be4f8.firebaseapp.com',
+  projectId: 'bspc-be4f8',
+  storageBucket: 'bspc-be4f8.firebasestorage.app',
+  messagingSenderId: '133746398244',
+  appId: '1:133746398244:web:03c0b077d035a470b0f4b1',
+};
+
 let cachedApp: FirebaseApp | null = null;
 let cachedAuth: Auth | null = null;
 let cachedFirestore: Firestore | null = null;
@@ -84,7 +93,12 @@ export function getFirebaseApp(): FirebaseApp {
     return cachedApp;
   }
 
-  const config = validateFirebaseConfig();
+  let config: FirebaseClientConfig;
+  try {
+    config = validateFirebaseConfig();
+  } catch {
+    config = DEFAULT_FIREBASE_CONFIG;
+  }
   cachedApp = initializeApp(config);
   return cachedApp;
 }
