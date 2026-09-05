@@ -362,7 +362,9 @@ export default function PledgesPage() {
       const aVal = a[sortKey];
       const bVal = b[sortKey];
       if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        return sortDirection === 'asc'
+          ? aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' })
+          : bVal.localeCompare(aVal, undefined, { numeric: true, sensitivity: 'base' });
       }
       return 0;
     });
@@ -437,6 +439,10 @@ export default function PledgesPage() {
             className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-850 focus:outline-none"
           >
             <option value="all">All</option>
+            <option value="Tier A">Tier A</option>
+            <option value="Tier B">Tier B</option>
+            <option value="Tier C">Tier C</option>
+            <option value="Tier D">Tier D</option>
             <option value="VIP1">VIP1</option>
             <option value="VIP2">VIP2</option>
             <option value="VIP3">VIP3</option>
