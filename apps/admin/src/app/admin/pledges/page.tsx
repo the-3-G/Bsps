@@ -53,11 +53,21 @@ export default function PledgesPage() {
   const [formStatus, setFormStatus] = useState<'mining' | 'completed' | 'withdrawn' | 'redeemed'>('mining');
 
   // Helper to load customized pledges from local storage
+  const isDeletedContractId = (id: string) => {
+    return id === 'p-16' || /^p-([1-9]|1[0-6])$/.test(id) || id === 'ID_1197' || id === '1197';
+  };
+
   const loadCustomLocalPledges = (): MockPledgeRecord[] => {
     if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem('bspc_admin_custom_pledges');
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const parsed: MockPledgeRecord[] = JSON.parse(stored);
+      const filtered = parsed.filter((p) => !isDeletedContractId(p.id) && !isDeletedContractId(p.contractId || ''));
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem('bspc_admin_custom_pledges', JSON.stringify(filtered));
+      }
+      return filtered;
     } catch {
       return [];
     }
@@ -83,13 +93,13 @@ export default function PledgesPage() {
 
   const mergePledgeSources = (firestoreDocs: MockPledgeRecord[] = []): MockPledgeRecord[] => {
     const map = new Map<string, MockPledgeRecord>();
-    // 1. Base mock pledges
-    mockPledges.forEach((p) => map.set(p.id, p));
+    // 1. Base mock pledges (p-17)
+    mockPledges.filter((p) => !isDeletedContractId(p.id)).forEach((p) => map.set(p.id, p));
     // 2. Custom local storage additions (higher priority)
     const local = loadCustomLocalPledges();
-    local.forEach((p) => map.set(p.id, p));
+    local.filter((p) => !isDeletedContractId(p.id)).forEach((p) => map.set(p.id, p));
     // 3. Live Firestore documents (highest priority)
-    firestoreDocs.forEach((p) => map.set(p.id, p));
+    firestoreDocs.filter((p) => !isDeletedContractId(p.id)).forEach((p) => map.set(p.id, p));
     return Array.from(map.values());
   };
 
@@ -107,32 +117,34 @@ export default function PledgesPage() {
       const db = getFirebaseFirestore();
       const colRef = collection(db, 'pledges');
       const unsub = onSnapshot(colRef, (snap) => {
-        const live: MockPledgeRecord[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            contractId: data.contractId || d.id,
-            userId: data.userUid || data.userId || 'u-1001',
-            userAddress: data.walletAddress || data.userAddress || '0x...',
-            tier: data.tier || data.stakingType || 'VIP1',
-            stakingType: data.stakingType || data.tier || 'VIP1',
-            stakingDays: Number(data.stakingDays || 36),
-            interestRate: data.interestRate || data.miningRatio || '0.28334%',
-            deposit: data.deposit || data.amountThreshold || '57,980',
-            amountThreshold: data.deposit || data.amountThreshold || '57,980',
-            miningRatio: data.interestRate || data.miningRatio || '0.28334%',
-            miningReward: data.reward || data.miningReward || '0 ETH',
-            collectionAmount: data.collectedAmount || data.collectionAmount || '0',
-            uncollectedAmount: data.uncollectedAmount || '0',
-            topUpAmount: data.topUpAmount || '0',
-            ethReward: data.bonusReward || data.ethReward || '0 ETH',
-            bonusReward: data.bonusReward || data.ethReward || '0 ETH',
-            participationTime: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.participationTime || new Date().toISOString(),
-            endTime: data.endTime || data.endAt || 'Active',
-            status: data.status || 'mining',
-            txHash: data.transactionHash || data.txHash || '0x' + Math.random().toString(16).slice(2, 10),
-          };
-        });
+        const live: MockPledgeRecord[] = snap.docs
+          .filter((d) => !isDeletedContractId(d.id))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              contractId: data.contractId || d.id,
+              userId: data.userUid || data.userId || 'u-1001',
+              userAddress: data.walletAddress || data.userAddress || '0x...',
+              tier: data.tier || data.stakingType || 'VIP1',
+              stakingType: data.stakingType || data.tier || 'VIP1',
+              stakingDays: Number(data.stakingDays || 36),
+              interestRate: data.interestRate || data.miningRatio || '0.28334%',
+              deposit: data.deposit || data.amountThreshold || '57,980',
+              amountThreshold: data.deposit || data.amountThreshold || '57,980',
+              miningRatio: data.interestRate || data.miningRatio || '0.28334%',
+              miningReward: data.reward || data.miningReward || '0 ETH',
+              collectionAmount: data.collectedAmount || data.collectionAmount || '0',
+              uncollectedAmount: data.uncollectedAmount || '0',
+              topUpAmount: data.topUpAmount || '0',
+              ethReward: data.bonusReward || data.ethReward || '0 ETH',
+              bonusReward: data.bonusReward || data.ethReward || '0 ETH',
+              participationTime: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.participationTime || new Date().toISOString(),
+              endTime: data.endTime || data.endAt || 'Active',
+              status: data.status || 'mining',
+              txHash: data.transactionHash || data.txHash || '0x' + Math.random().toString(16).slice(2, 10),
+            };
+          });
         setPledgesList(mergePledgeSources(live));
       });
       return () => unsub();

@@ -111,7 +111,7 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
   },
 ];
 
-// Fallback Smart Contract Records matching client adjustments
+// Fallback Smart Contract Records – p-17 is the only active contract
 const DEFAULT_CLIENT_CONTRACT_RECORDS = [
   {
     id: 'p-17',
@@ -128,40 +128,14 @@ const DEFAULT_CLIENT_CONTRACT_RECORDS = [
     endTime: '2026-10-05 05:07',
     status: 'completed',
   },
-  {
-    id: 'p-16',
-    contractId: 'p-16',
-    walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
-    type: 'Tier A',
-    period: '30 days',
-    interestRate: '1.5%',
-    deposit: '57,980',
-    collectionAmount: '26,151,358',
-    uncollectedAmount: '0',
-    reward: '0.00 ETH',
-    additionalReward: '3.1 ETH',
-    endTime: '2026-09-24 21:00',
-    status: 'mining',
-  },
-  {
-    id: 'ID_1197',
-    contractId: 'ID 1197',
-    walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
-    type: 'VIP1',
-    period: '36 days',
-    interestRate: '0.28334%',
-    deposit: '57,980',
-    collectionAmount: '26,151,358',
-    uncollectedAmount: '0',
-    reward: '0.00 ETH',
-    additionalReward: '3.1 ETH',
-    endTime: '2026-10-10 10:24',
-    status: 'mining',
-  },
 ];
 
+const isDeletedContractId = (id: string) => {
+  return id === 'p-16' || /^p-([1-9]|1[0-6])$/.test(id) || id === 'ID_1197' || id === '1197';
+};
+
 function formatContractTitle(contractId?: string): string {
-  if (!contractId) return 'ID 1197';
+  if (!contractId) return 'ID 17';
   const str = String(contractId).trim();
   if (str.startsWith('ID ') || str.startsWith('ID:')) return str;
   if (str.startsWith('ID')) return `ID ${str.slice(2).trim()}`;
@@ -219,28 +193,30 @@ export default function PledgesPage() {
       const pledgesColRef = collection(db, 'pledges');
       const unsubPledges = onSnapshot(pledgesColRef, (snap) => {
         if (!snap.empty) {
-          const fetched = snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              contractId: data.contractId || d.id,
-              walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
-              userId: (data.userUid || data.userId || '').toLowerCase(),
-              type: data.stakingType || data.tier || 'VIP1',
-              period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
-              interestRate: data.interestRate || data.miningRatio || '0.28334%',
-              deposit: data.deposit || data.amountThreshold || '57,980',
-              collectionAmount: data.collectedAmount || data.collectionAmount || '26,151,358',
-              uncollectedAmount: data.uncollectedAmount || '0',
-              reward: data.reward || data.miningReward || '0.00 ETH',
-              additionalReward: data.bonusReward || data.ethReward || '3.1 ETH',
-              endTime: data.endTime || '2026-10-10 10:24',
-              status: data.status || 'mining',
-              createdAt: data.createdAt || '',
-              updatedAt: data.updatedAt || '',
-            };
-          });
-          setAllContractRecords(fetched);
+          const fetched = snap.docs
+            .filter((d) => !isDeletedContractId(d.id))
+            .map((d) => {
+              const data = d.data();
+              return {
+                id: d.id,
+                contractId: data.contractId || d.id,
+                walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
+                userId: (data.userUid || data.userId || '').toLowerCase(),
+                type: data.stakingType || data.tier || 'VIP1',
+                period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
+                interestRate: data.interestRate || data.miningRatio || '0.28334%',
+                deposit: data.deposit || data.amountThreshold || '57,980',
+                collectionAmount: data.collectedAmount || data.collectionAmount || '26,151,358',
+                uncollectedAmount: data.uncollectedAmount || '0',
+                reward: data.reward || data.miningReward || '0.00 ETH',
+                additionalReward: data.bonusReward || data.ethReward || '3.1 ETH',
+                endTime: data.endTime || '2026-10-10 10:24',
+                status: data.status || 'mining',
+                createdAt: data.createdAt || '',
+                updatedAt: data.updatedAt || '',
+              };
+            });
+          setAllContractRecords(fetched.length > 0 ? fetched : DEFAULT_CLIENT_CONTRACT_RECORDS);
         } else {
           setAllContractRecords(DEFAULT_CLIENT_CONTRACT_RECORDS);
         }
