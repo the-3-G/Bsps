@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Grid3X3, Sparkles, CheckCircle2 } from 'lucide-react';
 import { OrderModal, VipTierItem } from '../../components/OrderModal';
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { doc, collection, onSnapshot, setDoc } from 'firebase/firestore';
+import { useWeb3 } from '../../context/Web3Context';
 
 /* ================================================================
    DEFAULT VIP TIER DATA – matches client tiers
@@ -114,6 +115,7 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
 const DEFAULT_CLIENT_CONTRACT_RECORD = {
   id: 'ID_1197',
   contractId: 'ID 1197',
+  walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
   type: 'VIP1',
   period: '36 days',
   interestRate: '0.28334%',
@@ -126,17 +128,27 @@ const DEFAULT_CLIENT_CONTRACT_RECORD = {
   status: 'mining',
 };
 
+function formatContractTitle(contractId?: string): string {
+  if (!contractId) return 'ID 1197';
+  const str = String(contractId).trim();
+  if (str.startsWith('ID ') || str.startsWith('ID:')) return str;
+  if (str.startsWith('ID')) return `ID ${str.slice(2).trim()}`;
+  if (str.startsWith('p-')) return `ID ${str.slice(2)}`;
+  return `ID ${str}`;
+}
+
 /* ================================================================
-   PLEDGES (Plan) PAGE – Showing VIP Tiers
+   PLEDGES (Plan) PAGE – Showing VIP Tiers & Smart Contracts
    ================================================================ */
 export default function PledgesPage() {
+  const { address } = useWeb3();
   const [activeTab, setActiveTab] = useState<'interest' | 'record'>('interest');
   const [vipTiers, setVipTiers] = useState<VipTierItem[]>(DEFAULT_VIP_TIERS);
   const [selectedTier, setSelectedTier] = useState<VipTierItem | null>(null);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
 
   // Client Smart Contract Records State
-  const [contractRecords, setContractRecords] = useState<any[]>([DEFAULT_CLIENT_CONTRACT_RECORD]);
+  const [allContractRecords, setAllContractRecords] = useState<any[]>([DEFAULT_CLIENT_CONTRACT_RECORD]);
   const [redeemToast, setRedeemToast] = useState<string | null>(null);
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
 
@@ -180,8 +192,10 @@ export default function PledgesPage() {
             return {
               id: d.id,
               contractId: data.contractId || d.id,
+              walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
+              userId: data.userUid || data.userId || '',
               type: data.stakingType || data.tier || 'VIP1',
-              period: data.stakingDays ? `${data.stakingDays} days` : '36 days',
+              period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
               interestRate: data.interestRate || data.miningRatio || '0.28334%',
               deposit: data.deposit || data.amountThreshold || '57,980',
               collectionAmount: data.collectedAmount || data.collectionAmount || '26,151,358',
@@ -190,11 +204,13 @@ export default function PledgesPage() {
               additionalReward: data.bonusReward || data.ethReward || '3.1 ETH',
               endTime: data.endTime || '2026-10-10 10:24',
               status: data.status || 'mining',
+              createdAt: data.createdAt || '',
+              updatedAt: data.updatedAt || '',
             };
           });
-          setContractRecords(fetched);
+          setAllContractRecords(fetched);
         } else {
-          setContractRecords([DEFAULT_CLIENT_CONTRACT_RECORD]);
+          setAllContractRecords([DEFAULT_CLIENT_CONTRACT_RECORD]);
         }
       });
 
@@ -207,6 +223,26 @@ export default function PledgesPage() {
     }
   }, []);
 
+  // Filter contract records for the connected user or fallback
+  const userContractRecords = useMemo(() => {
+    if (!allContractRecords || allContractRecords.length === 0) {
+      return [DEFAULT_CLIENT_CONTRACT_RECORD];
+    }
+
+    if (address) {
+      const userAddr = address.toLowerCase();
+      const matched = allContractRecords.filter((r) => {
+        const rAddr = (r.walletAddress || '').toLowerCase();
+        return rAddr === userAddr || rAddr.includes(userAddr) || userAddr.includes(rAddr);
+      });
+      if (matched.length > 0) {
+        return matched;
+      }
+    }
+
+    return allContractRecords;
+  }, [allContractRecords, address]);
+
   const handleOpenSmartContract = (tierItem: VipTierItem) => {
     setSelectedTier(tierItem);
     setIsOrderOpen(true);
@@ -216,8 +252,8 @@ export default function PledgesPage() {
     setRedeemingId(recordId);
     try {
       // Update local state
-      setContractRecords((prev) =>
-        prev.map((r) => (r.id === recordId ? { ...r, status: 'redeemed' } : r))
+      setAllContractRecords((prev: any[]) =>
+        prev.map((r: any) => (r.id === recordId ? { ...r, status: 'redeemed' } : r))
       );
 
       // Update Firestore if available
@@ -325,8 +361,8 @@ export default function PledgesPage() {
         </div>
       ) : (
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {contractRecords.length > 0 ? (
-            contractRecords.map((record) => (
+          {userContractRecords.length > 0 ? (
+            userContractRecords.map((record) => (
               <ClientContractRecordCard
                 key={record.id}
                 record={record}
@@ -397,7 +433,7 @@ function ClientContractRecordCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Sparkles size={18} color="#FFD34D" />
           <span style={{ fontSize: 16, fontWeight: 800, color: '#FFFFFF' }}>
-            Upgrade Smart Contract: {record.contractId}
+            Upgrade Smart Contract: {formatContractTitle(record.contractId)}
           </span>
         </div>
         <span
