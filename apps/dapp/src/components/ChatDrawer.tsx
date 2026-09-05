@@ -253,8 +253,8 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
       }
     }
 
-    if (status === 'closed' || status === 'blocked') {
-      setErrorMessage('This support conversation has been closed or blocked.');
+    if (status === 'blocked') {
+      setErrorMessage('This support conversation has been blocked.');
       return;
     }
 
@@ -285,13 +285,18 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         createdAt: serverTimestamp(),
       });
 
-      // Update last message preview & increment agent unread counter
-      await updateDoc(convDocRef, {
+      // Update last message preview, reactivate status if closed, & increment agent unread counter
+      const convUpdates: Record<string, any> = {
         lastMessagePreview: cleanText.slice(0, 100),
         lastMessageAt: serverTimestamp(),
         agentUnreadCount: increment(1),
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (status === 'closed') {
+        convUpdates.status = 'active';
+      }
+
+      await updateDoc(convDocRef, convUpdates);
     } catch (err: any) {
       console.error('Failed to send message:', err);
       setErrorMessage('Failed to send message. Please verify authorization.');
@@ -320,12 +325,12 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                 <Circle className={`w-2 h-2 fill-current ${
                   status === 'waiting' ? 'text-amber-400 animate-pulse' :
                   status === 'blocked' ? 'text-red-500' :
-                  status === 'closed' ? 'text-gray-500' : 'text-teal-400'
+                  'text-teal-400'
                 }`} />
                 <span className="text-[10px] text-slate-400">
                   {status === 'waiting' && 'Waiting for Support Agent...'}
                   {(status === 'assigned' || status === 'active') && 'Support Agent Connected'}
-                  {status === 'closed' && 'Conversation Closed'}
+                  {status === 'closed' && 'Support Connected (Send to continue)'}
                   {status === 'blocked' && 'User Blocked'}
                 </span>
               </div>
@@ -421,15 +426,15 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
           <input
             type="text"
-            placeholder={status === 'closed' || status === 'blocked' ? "Conversation is inactive" : "Type message to support..."}
+            placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message to support..."}
             value={inputText}
             onChange={handleInputChange}
-            disabled={isCreating || status === 'closed' || status === 'blocked'}
+            disabled={isCreating || status === 'blocked'}
             className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40"
           />
           <button
             type="submit"
-            disabled={!inputText.trim() || isCreating || status === 'closed' || status === 'blocked'}
+            disabled={!inputText.trim() || isCreating || status === 'blocked'}
             className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold p-2.5 rounded-xl transition-all"
           >
             <Send className="w-4 h-4" />

@@ -424,12 +424,12 @@ export function ThreadClient() {
               placeholder="Type official support reply..."
               value={replyText}
               onChange={handleInputChange}
-              disabled={convDetails?.status === 'closed' || convDetails?.status === 'blocked'}
+              disabled={convDetails?.status === 'blocked'}
               className="flex-1 border border-gray-300 rounded px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-teal-primary disabled:opacity-40"
             />
             <button
               type="submit"
-              disabled={!replyText.trim() || convDetails?.status === 'closed' || convDetails?.status === 'blocked'}
+              disabled={!replyText.trim() || convDetails?.status === 'blocked'}
               className="bg-teal-primary hover:bg-teal-hover disabled:opacity-40 text-white font-bold text-xs px-4 py-2 rounded inline-flex items-center gap-1.5 transition-colors"
             >
               <Send className="w-3.5 h-3.5" /> Send Reply
@@ -449,14 +449,33 @@ export function ThreadClient() {
               <div><span className="text-gray-400">Source:</span> {convDetails?.source}</div>
               <div><span className="text-gray-400">Created:</span> {convDetails?.createdAtTime}</div>
             </div>
-            {convDetails?.status !== 'closed' && convDetails?.status !== 'blocked' && (
+            {convDetails?.status !== 'blocked' && (
               <div className="pt-2 flex flex-col gap-2">
-                <button
-                  onClick={handleCloseConversation}
-                  className="w-full flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-bold py-1.5 rounded transition-colors"
-                >
-                  <CheckCircle className="w-3.5 h-3.5" /> Mark Resolved
-                </button>
+                {convDetails?.status === 'closed' ? (
+                  <button
+                    onClick={async () => {
+                      if (!conversationId) return;
+                      try {
+                        const db = getFirebaseFirestore();
+                        const convDocRef = doc(db, 'chatConversations', conversationId);
+                        await updateDoc(convDocRef, { status: 'active', updatedAt: serverTimestamp() });
+                      } catch (err: any) {
+                        console.error('Failed to reopen conversation:', err);
+                        setErrorMessage('Failed to reopen conversation.');
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold py-1.5 rounded transition-colors"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Reopen Conversation
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCloseConversation}
+                    className="w-full flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-bold py-1.5 rounded transition-colors"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Mark Resolved
+                  </button>
+                )}
                 <button
                   onClick={handleBlockUser}
                   className="w-full flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold py-1.5 rounded transition-colors"
