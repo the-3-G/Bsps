@@ -52,19 +52,57 @@ export default function PledgesPage() {
   const [formEndTime, setFormEndTime] = useState('');
   const [formStatus, setFormStatus] = useState<'mining' | 'completed' | 'withdrawn' | 'redeemed'>('mining');
 
+  // Helper to load customized pledges from local storage
+  const loadCustomLocalPledges = (): MockPledgeRecord[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('bspc_admin_custom_pledges');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveCustomLocalPledge = (record: MockPledgeRecord) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = loadCustomLocalPledges();
+      const idx = current.findIndex((p) => p.id === record.id || p.contractId === record.contractId);
+      let updated: MockPledgeRecord[];
+      if (idx !== -1) {
+        updated = [...current];
+        updated[idx] = record;
+      } else {
+        updated = [record, ...current];
+      }
+      localStorage.setItem('bspc_admin_custom_pledges', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save to localStorage:', e);
+    }
+  };
+
+  const mergePledgeSources = (firestoreDocs: MockPledgeRecord[] = []): MockPledgeRecord[] => {
+    const map = new Map<string, MockPledgeRecord>();
+    // 1. Base mock pledges
+    mockPledges.forEach((p) => map.set(p.id, p));
+    // 2. Custom local storage additions (higher priority)
+    const local = loadCustomLocalPledges();
+    local.forEach((p) => map.set(p.id, p));
+    // 3. Live Firestore documents (highest priority)
+    firestoreDocs.forEach((p) => map.set(p.id, p));
+    return Array.from(map.values());
+  };
+
   useEffect(() => {
-    // Load users for selection dropdown
+    // 1. Initial immediate populate
+    setPledgesList(mergePledgeSources());
+
+    // 2. Load users for selection dropdown
     userRepository.listUsers().then((users) => {
       setUserList(users.map((u) => ({ uid: u.uid, walletAddress: u.walletAddress, username: u.username })));
     }).catch(() => {});
 
-    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
-    if (useMock) {
-      setPledgesList(mockPledges);
-      return;
-    }
-
-    // Real-time Firestore sync
+    // 3. Real-time Firestore sync
     try {
       const db = getFirebaseFirestore();
       const colRef = collection(db, 'pledges');
@@ -95,17 +133,15 @@ export default function PledgesPage() {
             txHash: data.transactionHash || data.txHash || '0x' + Math.random().toString(16).slice(2, 10),
           };
         });
-        setPledgesList(live.length > 0 ? live : mockPledges);
+        setPledgesList(mergePledgeSources(live));
       });
       return () => unsub();
     } catch {
       pledgeRepository.listPledges().then((items: any[]) => {
         if (items && items.length > 0) {
-          setPledgesList(items as any);
-        } else {
-          setPledgesList(mockPledges);
+          setPledgesList(mergePledgeSources(items as any));
         }
-      });
+      }).catch(() => {});
     }
   }, []);
 
@@ -206,7 +242,10 @@ export default function PledgesPage() {
         txHash: recordData.txHash,
       };
 
-      // Optimistic instant state update
+      // 1. Save to local storage for instant durability
+      saveCustomLocalPledge(mappedRecord);
+
+      // 2. Immediate optimistic state update
       setPledgesList((prev) => {
         const idx = prev.findIndex((p) => p.id === formContractId || p.contractId === formContractId);
         if (idx !== -1) {
@@ -217,6 +256,7 @@ export default function PledgesPage() {
         return [mappedRecord, ...prev];
       });
 
+      // 3. Write to Firestore
       try {
         const db = getFirebaseFirestore();
         const docRef = doc(db, 'pledges', formContractId);
@@ -225,6 +265,7 @@ export default function PledgesPage() {
         console.warn('Firestore remote sync note:', fsErr);
       }
 
+      // 4. Update in-memory mock repository
       if (pledgeRepository?.createOrUpdatePledge) {
         try {
           await pledgeRepository.createOrUpdatePledge(recordData as any);
@@ -235,14 +276,14 @@ export default function PledgesPage() {
       setTimeout(() => {
         setIsModalOpen(false);
         setIsSaving(false);
-      }, 700);
+      }, 500);
     } catch (err) {
       console.error('Error saving smart contract:', err);
       setIsSaving(false);
       setSaveSuccessMsg('Saved locally!');
       setTimeout(() => {
         setIsModalOpen(false);
-      }, 700);
+      }, 500);
     }
   };
 
