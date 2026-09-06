@@ -14,7 +14,7 @@ import { ConfirmAuthorizationModal } from '../components/ConfirmAuthorizationMod
 import { useWeb3 } from '../context/Web3Context';
 
 // Routes that show the authenticated bottom navigation
-const AUTH_ROUTES = ['/dashboard', '/assets', '/pledges', '/referrals', '/withdraw'];
+const AUTH_ROUTES = ['/dashboard', '/assets', '/pledges', '/referrals', '/account', '/withdraw'];
 
 const HEADER_NAV_ITEMS = [
   { label: 'Home',      href: '/' },
@@ -22,7 +22,7 @@ const HEADER_NAV_ITEMS = [
   { label: 'Pool Data', href: '/dashboard' },
   { label: 'Plan',      href: '/pledges' },
   { label: 'Loan',      href: '/loan' },
-  { label: 'Paper',     href: '/referrals' },
+  { label: 'Account',   href: '/referrals' },
 ];
 
 function DAppLayoutInner({ children }: { children: React.ReactNode }) {

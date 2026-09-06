@@ -20,7 +20,7 @@ const MENU_ITEMS = [
   { label: 'Pool Data', href: '/pledges',   icon: Cpu },
   { label: 'Loan',      href: '/loan',      icon: FileText },
 
-  { label: 'Paper',     href: '/referrals', icon: FileText },
+  { label: 'Account',   href: '/referrals', icon: UserCheck },
 ];
 
 export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenChat }: SideDrawerProps) {
