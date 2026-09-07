@@ -332,8 +332,8 @@ function DAppTopTabs() {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 0,
-        padding: '12px 16px 10px',
+        gap: 6,
+        padding: '10px 16px',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         background: '#00152B',
       }}
@@ -347,18 +347,19 @@ function DAppTopTabs() {
             style={{
               flex: 1,
               textAlign: 'center',
-              fontSize: 15,
-              fontWeight: active ? 700 : 500,
-              color: active ? '#FFFFFF' : '#8F98A6',
+              fontSize: 14,
+              fontWeight: active ? 800 : 500,
+              color: active ? '#FFD34D' : '#8F98A6',
               textDecoration: 'none',
-              padding: '8px 4px',
-              borderRadius: 8,
+              padding: '9px 10px',
+              borderRadius: 20,
               background: active
-                ? 'rgba(255,255,255,0.06)'
+                ? 'linear-gradient(180deg, #0F2642 0%, #0B1E34 100%)'
                 : 'transparent',
               border: active
-                ? '1px solid rgba(255,255,255,0.1)'
+                ? '1px solid rgba(255,211,77,0.2)'
                 : '1px solid transparent',
+              boxShadow: active ? '0 2px 10px rgba(0,0,0,0.25)' : 'none',
               transition: 'all 0.2s ease',
             }}
           >

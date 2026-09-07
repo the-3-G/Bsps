@@ -140,10 +140,10 @@ export default function AccountPage() {
   // Active Record Filter: 'exchange' | 'withdraw' | 'interest' | 'rebate'
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTab>('exchange');
 
-  // Core Account Balances & Outputs (from screenshot: 803.094263732077 ETH total, 38.127963732077 ETH exchangeable)
-  const [totalOutputEth, setTotalOutputEth] = useState<number>(803.094263732077);
+  // Core Account Balances & Outputs (Initial default values set to 0.0)
+  const [totalOutputEth, setTotalOutputEth] = useState<number>(0.0);
   const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number>(0.0);
-  const [exchangeableEth, setExchangeableEth] = useState<number>(38.127963732077);
+  const [exchangeableEth, setExchangeableEth] = useState<number>(0.0);
 
   // VIP & Tier details (matching Image 1)
   const [vipLevel, setVipLevel] = useState<number>(1);
@@ -172,7 +172,7 @@ export default function AccountPage() {
   const [countdown, setCountdown] = useState<string>('00:00:00');
   const [nextInterestTime, setNextInterestTime] = useState<string>('');
 
-  // 4-Hour Interest Schedule Calculation
+  // 4-Hour Interest Schedule & Automated 0.7% Yield Generation
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
@@ -206,6 +206,23 @@ export default function AccountPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Sync wallet balance & trigger automated 0.7% / 4-hour yield generation in ETH
+  useEffect(() => {
+    if (isConnected || usdtBalance !== undefined) {
+      const parsedBalance = parseFloat(usdtBalance) || (walletBalanceUsdc > 0 ? walletBalanceUsdc : 1000.0);
+      setWalletBalanceUsdc(parsedBalance);
+
+      // Automated 0.7% yield calculation per 4-hour period (6x daily)
+      // 1,000 USDC balance => 7 USDC yield per 4h period => 7 / 2640.50 = 0.002651013 ETH
+      const yieldUsdcPerCycle = parsedBalance * 0.007; // 0.7%
+      const yieldEthPerCycle = yieldUsdcPerCycle / ETH_USDC_RATE;
+
+      // Accrue 4-hour yield cycles automatically
+      setTotalOutputEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
+      setExchangeableEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
+    }
+  }, [isConnected, usdtBalance]);
+
   // Update default withdraw address to connected wallet
   useEffect(() => {
     if (address) {
@@ -213,9 +230,39 @@ export default function AccountPage() {
     }
   }, [address]);
 
-  // Firestore synchronization
+  // Real-time synchronization with Firestore users document & local Admin contract overrides
   useEffect(() => {
-    if (!address) return;
+    const syncUserLocalOverrides = () => {
+      if (typeof window === 'undefined') return;
+      try {
+        const addr = address ? address.toLowerCase() : '0x149534751f4f85af01ce291fd2be194c8950441d';
+        const userKey = `bspc_user_overrides_${addr}`;
+        const stored = localStorage.getItem(userKey);
+        if (stored) {
+          const rec = JSON.parse(stored);
+          const totalEth = parseFloat(String(rec.miningReward || rec.reward || rec.bonusReward || '').replace(/[^\d.]/g, ''));
+          const uncollEth = parseFloat(String(rec.uncollectedAmount || rec.reward || '').replace(/[^\d.]/g, ''));
+          const depUsdc = parseFloat(String(rec.deposit || rec.amountThreshold || '').replace(/[^\d.]/g, ''));
+
+          if (!isNaN(totalEth) && totalEth > 0) setTotalOutputEth(totalEth);
+          if (!isNaN(uncollEth) && uncollEth > 0) setExchangeableEth(uncollEth);
+          if (!isNaN(depUsdc) && depUsdc > 0) setWalletBalanceUsdc(depUsdc);
+          if (rec.tier || rec.stakingType) setVipName(rec.tier || rec.stakingType);
+        }
+      } catch (_) {}
+    };
+
+    syncUserLocalOverrides();
+    window.addEventListener('storage', syncUserLocalOverrides);
+    window.addEventListener('bspc_pledges_updated', syncUserLocalOverrides);
+
+    if (!address) {
+      return () => {
+        window.removeEventListener('storage', syncUserLocalOverrides);
+        window.removeEventListener('bspc_pledges_updated', syncUserLocalOverrides);
+      };
+    }
+
     try {
       const db = getFirebaseFirestore();
       const uid = address.toLowerCase();
@@ -233,9 +280,15 @@ export default function AccountPage() {
           if (d.totalEarned !== undefined) setTotalEarnedUsdc(d.totalEarned);
         }
       });
-      return () => unsub();
+      return () => {
+        window.removeEventListener('storage', syncUserLocalOverrides);
+        window.removeEventListener('bspc_pledges_updated', syncUserLocalOverrides);
+        unsub();
+      };
     } catch (e) {
       console.warn('Account firestore sync warning:', e);
+      window.removeEventListener('storage', syncUserLocalOverrides);
+      window.removeEventListener('bspc_pledges_updated', syncUserLocalOverrides);
     }
   }, [address]);
 
@@ -1019,7 +1072,7 @@ export default function AccountPage() {
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
               <span style={{ color: '#8F98A6' }}>Interest Rate</span>
-              <span style={{ color: '#00E6CC', fontWeight: 800 }}>0.28334% / period</span>
+              <span style={{ color: '#00E6CC', fontWeight: 800 }}>0.7000% / period (every 4h)</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>

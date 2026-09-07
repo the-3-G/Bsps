@@ -158,8 +158,55 @@ export default function PledgesPage() {
   const [redeemToast, setRedeemToast] = useState<string | null>(null);
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
 
-  // Sync with Firestore config and real-time Pledges
+  // Helper to load custom pledges from localStorage
+  const loadLocalCustomPledges = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('bspc_admin_custom_pledges');
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      return parsed.map((p: any) => ({
+        id: p.id || p.contractId,
+        contractId: p.contractId || p.id,
+        walletAddress: (p.walletAddress || p.userAddress || '').toLowerCase(),
+        userId: (p.userId || p.userUid || '').toLowerCase(),
+        type: p.tier || p.stakingType || 'Tier A',
+        period: p.stakingDays ? `${p.stakingDays} days` : '36 days',
+        interestRate: p.interestRate || p.miningRatio || '1.5%',
+        deposit: p.deposit || p.amountThreshold || '57980',
+        collectionAmount: p.collectionAmount || p.collectedAmount || '51628.71954',
+        uncollectedAmount: p.uncollectedAmount || '6389.6586',
+        reward: p.miningReward || p.reward || '6.474860079 ETH',
+        additionalReward: p.bonusReward || p.ethReward || '3.1',
+        endTime: p.endTime || 'June 22 Monday',
+        status: p.status || 'mining',
+      }));
+    } catch {
+      return [];
+    }
+  };
+
+  // Sync with Firestore config and real-time Pledges + Local Storage Overrides
   useEffect(() => {
+    const syncLocal = () => {
+      const customPledges = loadLocalCustomPledges();
+      if (customPledges.length > 0) {
+        setAllContractRecords((prev) => {
+          const map = new Map<string, any>();
+          prev.forEach((r) => map.set(r.id, r));
+          customPledges.forEach((r: any) => map.set(r.id, r));
+          return Array.from(map.values());
+        });
+      }
+    };
+
+    // Initial local sync
+    syncLocal();
+
+    // Listen to window storage and custom update events
+    window.addEventListener('storage', syncLocal);
+    window.addEventListener('bspc_pledges_updated', syncLocal);
+
     try {
       const db = getFirebaseFirestore();
       
@@ -192,12 +239,19 @@ export default function PledgesPage() {
       // 2. Real-time Smart Contract Records Sync
       const pledgesColRef = collection(db, 'pledges');
       const unsubPledges = onSnapshot(pledgesColRef, (snap) => {
+        const customLocal = loadLocalCustomPledges();
+        const map = new Map<string, any>();
+
+        // Default base
+        DEFAULT_CLIENT_CONTRACT_RECORDS.forEach((r) => map.set(r.id, r));
+
+        // Firestore fetched
         if (!snap.empty) {
-          const fetched = snap.docs
+          snap.docs
             .filter((d) => !isDeletedContractId(d.id))
-            .map((d) => {
+            .forEach((d) => {
               const data = d.data();
-              return {
+              map.set(d.id, {
                 id: d.id,
                 contractId: data.contractId || d.id,
                 walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
@@ -214,20 +268,26 @@ export default function PledgesPage() {
                 status: data.status || 'mining',
                 createdAt: data.createdAt || '',
                 updatedAt: data.updatedAt || '',
-              };
+              });
             });
-          setAllContractRecords(fetched.length > 0 ? fetched : DEFAULT_CLIENT_CONTRACT_RECORDS);
-        } else {
-          setAllContractRecords(DEFAULT_CLIENT_CONTRACT_RECORDS);
         }
+
+        // Custom local overrides (highest priority)
+        customLocal.forEach((r: any) => map.set(r.id, r));
+
+        setAllContractRecords(Array.from(map.values()));
       });
 
       return () => {
+        window.removeEventListener('storage', syncLocal);
+        window.removeEventListener('bspc_pledges_updated', syncLocal);
         unsubTiers();
         unsubPledges();
       };
     } catch (e) {
       console.warn('Firestore sync warning:', e);
+      window.removeEventListener('storage', syncLocal);
+      window.removeEventListener('bspc_pledges_updated', syncLocal);
     }
   }, []);
 

@@ -254,8 +254,16 @@ export default function PledgesPage() {
         txHash: recordData.txHash,
       };
 
-      // 1. Save to local storage for instant durability
+      // 1. Save to local storage for instant durability & cross-tab sync
       saveCustomLocalPledge(mappedRecord);
+      if (formUserAddress && typeof window !== 'undefined') {
+        try {
+          const userKey = `bspc_user_overrides_${formUserAddress.toLowerCase()}`;
+          localStorage.setItem(userKey, JSON.stringify(mappedRecord));
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: mappedRecord }));
+        } catch (_) {}
+      }
 
       // 2. Immediate optimistic state update
       setPledgesList((prev) => {
@@ -268,11 +276,34 @@ export default function PledgesPage() {
         return [mappedRecord, ...prev];
       });
 
-      // 3. Write to Firestore
+      // 3. Write to Firestore (pledges collection + target user document sync)
       try {
         const db = getFirebaseFirestore();
-        const docRef = doc(db, 'pledges', formContractId);
-        await setDoc(docRef, recordData, { merge: true });
+        const pledgeDocRef = doc(db, 'pledges', formContractId);
+        await setDoc(pledgeDocRef, recordData, { merge: true });
+
+        if (formUserAddress) {
+          const uid = formUserAddress.toLowerCase();
+          const userDocRef = doc(db, 'users', uid);
+          const totalEth = parseFloat(formReward.replace(/[^\d.]/g, '')) || parseFloat(formBonusReward.replace(/[^\d.]/g, '')) || 0;
+          const exchangeableEth = parseFloat(formUncollectedAmount.replace(/[^\d.]/g, '')) || totalEth;
+          const walletUsdc = parseFloat(formDeposit.replace(/[^\d.]/g, '')) || 0;
+
+          await setDoc(
+            userDocRef,
+            {
+              totalOutputEth: totalEth,
+              exchangeableEth: exchangeableEth,
+              walletBalanceUsdc: walletUsdc,
+              interestRate: formInterestRate,
+              vipName: formStakingType,
+              uncollectedAmount: formUncollectedAmount,
+              collectedAmount: formCollectedAmount,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
       } catch (fsErr) {
         console.warn('Firestore remote sync note:', fsErr);
       }
