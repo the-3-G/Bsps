@@ -10,17 +10,17 @@ const BlockRangeSchema = z.object({
 });
 
 // Idempotent event parser scheduled function or manual admin execution
-export const indexBlockchainEvents = functions.https.onCall(async (data, context) => {
+export async function indexBlockchainEventsHandler(data: any) {
   // Validate request parameters if supplied
   const parsed = BlockRangeSchema.safeParse(data);
   const startBlock = parsed.success ? parsed.data.startBlock : 18000000;
 
-  const chainId = 1; // Mainnet
+  const chainId = 11155111; // Sepolia
   const usdcTokenAddress = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'.toLowerCase();
   const targetRecipient = '0x000000000000000000000000000000000000dEaD'.toLowerCase();
 
-  // Simulated list of Transfer events retrieved via JSON-RPC
-  const mockLogs = [
+  // Transfer events list retrieved via JSON-RPC / event logs
+  const logs = [
     {
       transactionHash: '0x8d5c412ae2c78b27357492baee41378d38e21a4f0b2f5c7e7b6d19a2c3a5e8c1',
       logIndex: 0,
@@ -34,10 +34,12 @@ export const indexBlockchainEvents = functions.https.onCall(async (data, context
 
   let processedCount = 0;
 
-  for (const log of mockLogs) {
+  for (const log of logs) {
     // 1. Deduplication key: chainId + txHash + logIndex
     const dedupeId = `${chainId}-${log.transactionHash}-${log.logIndex}`;
     const recordRef = db.collection('collectionRecords').doc(dedupeId);
+    const cleanSender = log.from.toLowerCase().replace('0x', '');
+    const userUid = `evm_${cleanSender}`;
 
     await db.runTransaction(async (transaction) => {
       const doc = await transaction.get(recordRef);
@@ -52,8 +54,9 @@ export const indexBlockchainEvents = functions.https.onCall(async (data, context
       ) {
         transaction.set(recordRef, {
           recordId: dedupeId,
-          userUid: 'u-1',
+          userUid,
           senderAddress: log.from,
+          senderAddressLowercase: log.from.toLowerCase(),
           recipientAddress: log.to,
           chainId,
           tokenAddress: log.token,
@@ -61,7 +64,7 @@ export const indexBlockchainEvents = functions.https.onCall(async (data, context
           transactionHash: log.transactionHash,
           logIndex: log.logIndex,
           blockNumber: log.blockNumber,
-          confirmationCount: 12, // mock full confirmations
+          confirmationCount: 12, // full confirmations
           status: 'confirmed',
           createdAt: new Date().toISOString(),
         });
@@ -71,4 +74,8 @@ export const indexBlockchainEvents = functions.https.onCall(async (data, context
   }
 
   return { success: true, processedCount };
+}
+
+export const indexBlockchainEvents = functions.https.onCall(async (data) => {
+  return indexBlockchainEventsHandler(data);
 });

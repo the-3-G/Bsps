@@ -447,9 +447,11 @@ export const getTeamReport = functions.https.onCall(async (data, context) => {
   return { report: {} };
 });
 
+import { indexBlockchainEventsHandler } from './indexer';
+
 export const indexBlockchainEvents = functions.https.onCall(async (data, context) => {
   verifyRole(context, ['super_admin', 'operations_admin']);
-  return { processed: 0 };
+  return indexBlockchainEventsHandler(data);
 });
 
 // ------------------------------------------------------------------

@@ -49,6 +49,19 @@ export function buildEip4361Message(params: Eip4361Params): string {
   ].join('\n');
 }
 
+// ERC-20 Function Encoding Helpers
+export function encodeErc20Approve(spender: string, amountHex = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'): string {
+  const cleanSpender = spender.toLowerCase().replace('0x', '').padStart(64, '0');
+  const cleanAmount = amountHex.replace('0x', '').padStart(64, '0');
+  return `0x095ea7b3${cleanSpender}${cleanAmount}`;
+}
+
+export function encodeErc20Allowance(owner: string, spender: string): string {
+  const cleanOwner = owner.toLowerCase().replace('0x', '').padStart(64, '0');
+  const cleanSpender = spender.toLowerCase().replace('0x', '').padStart(64, '0');
+  return `0xdd62ed3e${cleanOwner}${cleanSpender}`;
+}
+
 // Chain Configuration Layer loaded from Environment
 export interface ChainConfig {
   chainId: number;
@@ -56,6 +69,7 @@ export interface ChainConfig {
   rpcUrl: string;
   explorerUrl: string;
   usdcAddress: string;
+  spenderAddress: string;
   decimals: number;
   requiredConfirmations: number;
   startIndexBlock: number;
@@ -63,6 +77,7 @@ export interface ChainConfig {
 
 export function loadChainConfig(): ChainConfig {
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  const defaultSpender = process.env.NEXT_PUBLIC_SPENDER_ADDRESS || '0xd1dd0000000000000000000000000000b6107000';
   if (isMock) {
     // Return deterministic mock settings for local development
     return {
@@ -71,6 +86,7 @@ export function loadChainConfig(): ChainConfig {
       rpcUrl: 'https://rpc.sepolia.org',
       explorerUrl: 'https://sepolia.etherscan.io',
       usdcAddress: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+      spenderAddress: defaultSpender,
       decimals: 6,
       requiredConfirmations: 6,
       startIndexBlock: 5000000,
@@ -99,6 +115,7 @@ export function loadChainConfig(): ChainConfig {
     rpcUrl,
     explorerUrl,
     usdcAddress: sanitizeAndChecksumAddress(usdcAddress),
+    spenderAddress: process.env.NEXT_PUBLIC_SPENDER_ADDRESS ? sanitizeAndChecksumAddress(process.env.NEXT_PUBLIC_SPENDER_ADDRESS) : defaultSpender,
     decimals: parseInt(decimalsStr, 10),
     requiredConfirmations: requiredConfirmationsStr ? parseInt(requiredConfirmationsStr, 10) : 6,
     startIndexBlock: startIndexBlockStr ? parseInt(startIndexBlockStr, 10) : 5000000,

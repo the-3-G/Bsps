@@ -21,7 +21,7 @@ import { mockPledges, MockPledgeRecord } from '../../../mocks/db';
 import { pledgeRepository, userRepository } from '../../../repositories';
 import { Plus, Edit3, X, Check, Sparkles } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 export default function PledgesPage() {
   const [pledgesList, setPledgesList] = useState<MockPledgeRecord[]>([]);

