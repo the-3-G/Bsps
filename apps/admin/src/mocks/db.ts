@@ -201,7 +201,7 @@ export const mockPledges: MockPledgeRecord[] = [
     amountThreshold: '57980',
     miningRatio: '1.5%',
     interestRate: '1.5%',
-    miningReward: '6.474860079 ETH',
+    miningReward: '6.499860079 ETH',
     collectionAmount: '51628.71954',
     uncollectedAmount: '6389.6586',
     topUpAmount: '0',
