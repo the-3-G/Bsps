@@ -51,6 +51,10 @@ export default function UsersPage() {
   // Drawer / Dialog States
   const [selectedUser, setSelectedUser] = useState<DbUser | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<'profile' | 'referrals' | 'audit' | null>(null);
+  const [drawerAlias, setDrawerAlias] = useState('');
+  const [drawerNote, setDrawerNote] = useState('');
+  const [isSavingDrawerAlias, setIsSavingDrawerAlias] = useState(false);
+  const [drawerSaveMsg, setDrawerSaveMsg] = useState<string | null>(null);
 
   const [userToToggle, setUserToToggle] = useState<DbUser | null>(null);
   const [actionType, setActionType] = useState<'status' | 'session' | null>(null);
@@ -84,6 +88,39 @@ export default function UsersPage() {
       setOperationRef(`AUTH-${user.uid.slice(-4).toUpperCase()}-${nextAuthStatus.toUpperCase()}`);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to update user authorization status.');
+    }
+  };
+
+  const handleSaveDrawerAliasAndNote = async () => {
+    if (!selectedUser) return;
+    setIsSavingDrawerAlias(true);
+    setDrawerSaveMsg(null);
+    try {
+      const db = getFirebaseFirestore();
+      const { doc, setDoc } = await import('firebase/firestore');
+      const targetUid = selectedUser.uid || selectedUser.walletAddress;
+      await setDoc(doc(db, 'users', targetUid), {
+        clientAlias: drawerAlias.trim(),
+        adminNote: drawerNote.trim(),
+        customNote: drawerNote.trim(),
+      }, { merge: true });
+
+      setSelectedUser((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              clientAlias: drawerAlias.trim(),
+              adminNote: drawerNote.trim(),
+              customNote: drawerNote.trim(),
+            }
+          : null
+      );
+      setDrawerSaveMsg('Saved successfully!');
+      setTimeout(() => setDrawerSaveMsg(null), 3000);
+    } catch (err: any) {
+      setDrawerSaveMsg('Failed to save: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingDrawerAlias(false);
     }
   };
 
@@ -240,8 +277,15 @@ export default function UsersPage() {
 
       const f = appliedFilters;
       const matchesUserId = f.userId ? u.uid.toLowerCase().includes(f.userId.toLowerCase()) : true;
-      const matchesUsername = f.username ? u.username.toLowerCase().includes(f.username.toLowerCase()) : true;
-      const matchesWallet = f.wallet ? u.walletAddress.toLowerCase().includes(f.wallet.toLowerCase()) : true;
+      const matchesUsername = f.username
+        ? u.username.toLowerCase().includes(f.username.toLowerCase()) ||
+          ((u as any).clientAlias && (u as any).clientAlias.toLowerCase().includes(f.username.toLowerCase())) ||
+          ((u as any).adminNote && (u as any).adminNote.toLowerCase().includes(f.username.toLowerCase()))
+        : true;
+      const matchesWallet = f.wallet
+        ? u.walletAddress.toLowerCase().includes(f.wallet.toLowerCase()) ||
+          ((u as any).clientAlias && (u as any).clientAlias.toLowerCase().includes(f.wallet.toLowerCase()))
+        : true;
       const matchesStatus = f.status === 'all' || u.status === f.status;
       return matchesUserId && matchesUsername && matchesWallet && matchesStatus;
     })
@@ -377,7 +421,30 @@ export default function UsersPage() {
                 {paginatedUsers.map((u) => (
                   <tr key={u.uid} className="hover:bg-gray-50/50">
                     {visibleColumns.includes('uid') && <td className="font-mono text-gray-700 font-bold">{u.uid}</td>}
-                    {visibleColumns.includes('username') && <td className="text-gray-800 font-semibold">{u.username}</td>}
+                    {visibleColumns.includes('username') && (
+                      <td>
+                        <div className="flex flex-col">
+                          {(u as any).clientAlias ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-gray-900 text-xs">{(u as any).clientAlias}</span>
+                              <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-amber-200">
+                                ID NAME
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-800 font-semibold">{u.username}</span>
+                          )}
+                          {(u as any).clientAlias && (
+                            <span className="text-[11px] text-gray-400 font-mono">{u.username}</span>
+                          )}
+                          {(u as any).adminNote && (
+                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1 mt-0.5 max-w-[180px] truncate" title={(u as any).adminNote}>
+                              📝 {(u as any).adminNote}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     {visibleColumns.includes('walletAddress') && (
                       <td>
                         <WalletAddressCell address={u.walletAddress} />
@@ -437,6 +504,9 @@ export default function UsersPage() {
                       <button
                         onClick={() => {
                           setSelectedUser(u);
+                          setDrawerAlias((u as any).clientAlias || '');
+                          setDrawerNote((u as any).adminNote || (u as any).customNote || '');
+                          setDrawerSaveMsg(null);
                           setActiveDrawer('profile');
                         }}
                         className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-1 rounded text-[11px] font-semibold transition-all inline-flex items-center gap-0.5"
@@ -553,6 +623,54 @@ export default function UsersPage() {
                 <div className="text-xs font-mono font-bold text-teal-primary mt-1">{selectedUser.invitationCode}</div>
               </div>
             )}
+            {/* Custom Client ID & Identification Notes */}
+            <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3 space-y-2 mt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
+                  🏷️ Client Identification (ID Name & Notes)
+                </span>
+                {drawerSaveMsg && (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    {drawerSaveMsg}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-amber-700">
+                Assign a custom name (e.g. &quot;Argalw Addis&quot;) and notes to easily identify this client across chats &amp; dashboard.
+              </p>
+              <div>
+                <label className="text-[10px] font-bold text-gray-600 uppercase block mb-0.5">
+                  Client ID Name / Alias
+                </label>
+                <input
+                  type="text"
+                  value={drawerAlias}
+                  onChange={(e) => setDrawerAlias(e.target.value)}
+                  placeholder="e.g. Argalw Addis, VIP Client #1..."
+                  className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-600 uppercase block mb-0.5">
+                  Client Identification Note
+                </label>
+                <textarea
+                  value={drawerNote}
+                  onChange={(e) => setDrawerNote(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Authorized wallet, requested loan, regular trader..."
+                  className="w-full text-xs px-2.5 py-1.5 bg-white border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+                />
+              </div>
+              <button
+                onClick={handleSaveDrawerAliasAndNote}
+                disabled={isSavingDrawerAlias}
+                className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs py-1.5 px-3 rounded shadow-sm transition-all"
+              >
+                {isSavingDrawerAlias ? 'Saving...' : '💾 Save Client ID Name & Note'}
+              </button>
+            </div>
+
             <div className="border-t border-gray-200 pt-3 mt-4">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">User Loans & Credit</label>
               <Link

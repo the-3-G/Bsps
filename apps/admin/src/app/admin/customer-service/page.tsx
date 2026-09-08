@@ -12,6 +12,9 @@ import { httpsCallable } from 'firebase/functions';
 interface MockConversation {
   conversationId: string;
   guestLabel: string;
+  clientAlias?: string;
+  walletAddress?: string;
+  customNote?: string;
   source: 'receive_voucher' | 'floating_chat' | 'side_menu' | 'general_support';
   status: 'waiting' | 'assigned' | 'active' | 'closed' | 'blocked';
   assignedAgent: string;
@@ -23,7 +26,10 @@ interface MockConversation {
 const mockConversationsData: MockConversation[] = [
   {
     conversationId: 'conv-8921',
-    guestLabel: 'Guest 4821',
+    guestLabel: 'User_4765 (0x16db...4765)',
+    clientAlias: 'Argalw Addis',
+    walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+    customNote: 'VIP member requesting node voucher',
     source: 'receive_voucher',
     status: 'waiting',
     assignedAgent: 'Unassigned',
@@ -33,7 +39,8 @@ const mockConversationsData: MockConversation[] = [
   },
   {
     conversationId: 'conv-4309',
-    guestLabel: 'Guest 9102',
+    guestLabel: 'User_441D (0x1495...441d)',
+    walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
     source: 'receive_voucher',
     status: 'assigned',
     assignedAgent: 'Support Agent Alpha',
@@ -84,9 +91,16 @@ export default function CustomerServiceAdminPage() {
         const list: MockConversation[] = [];
         snapshot.forEach((d) => {
           const data = d.data();
+          const walletAddr = data.walletAddress || (data.userUid?.startsWith('0x') ? data.userUid : '') || '';
+          const alias = data.clientAlias || data.idName || '';
+          const fallbackLabel = walletAddr ? `User_${walletAddr.slice(-4).toUpperCase()}` : (data.guestLabel || `Guest ${data.guestId?.slice(-4) || ''}`);
+
           list.push({
             conversationId: d.id,
-            guestLabel: data.guestLabel || `Guest ${data.guestId?.slice(-4) || ''}`,
+            guestLabel: alias || fallbackLabel,
+            clientAlias: alias,
+            walletAddress: walletAddr,
+            customNote: data.customNote || '',
             source: data.source || 'general_support',
             status: data.status || 'waiting',
             assignedAgent: data.assignedAgentUid || 'Unassigned',
@@ -107,9 +121,13 @@ export default function CustomerServiceAdminPage() {
   }, []);
 
   const filtered = conversations.filter((c) => {
+    const query = searchFilter.toLowerCase();
     const matchesSearch = searchFilter
-      ? c.conversationId.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        c.guestLabel.toLowerCase().includes(searchFilter.toLowerCase())
+      ? c.conversationId.toLowerCase().includes(query) ||
+        c.guestLabel.toLowerCase().includes(query) ||
+        (c.walletAddress && c.walletAddress.toLowerCase().includes(query)) ||
+        (c.clientAlias && c.clientAlias.toLowerCase().includes(query)) ||
+        (c.customNote && c.customNote.toLowerCase().includes(query))
       : true;
     const matchesStatus = statusFilter === 'all' ? true : c.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -271,13 +289,13 @@ export default function CustomerServiceAdminPage() {
       </div>
 
       <FilterBar>
-        <FilterField label="Search Guest / Conversation ID">
+        <FilterField label="Search Client ID, Alias, Wallet (0x...) or Note">
           <input
             type="text"
-            placeholder="conv-..."
+            placeholder="Search ID, alias, 0x16db..., or note..."
             value={searchFilter}
             onChange={(e) => setSearchFilter(e.target.value)}
-            className="border border-gray-300 rounded px-2.5 py-1 text-xs bg-white text-gray-800 focus:outline-none"
+            className="border border-gray-300 rounded px-2.5 py-1 text-xs bg-white text-gray-800 focus:outline-none min-w-[260px]"
           />
         </FilterField>
 
@@ -302,7 +320,7 @@ export default function CustomerServiceAdminPage() {
           <thead>
             <tr className="bg-gray-100/60 border-b border-gray-200 text-gray-500 font-semibold">
               <th>Conversation ID</th>
-              <th>Guest Label</th>
+              <th>Client Identifier / Wallet</th>
               <th>Source</th>
               <th>Status</th>
               <th>Assigned Agent</th>
@@ -315,7 +333,35 @@ export default function CustomerServiceAdminPage() {
             {filtered.map((c) => (
               <tr key={c.conversationId} className="hover:bg-gray-50/80 transition-colors">
                 <td className="font-mono font-bold text-gray-900">{c.conversationId}</td>
-                <td className="font-semibold text-gray-800">{c.guestLabel}</td>
+                <td>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5 font-bold text-gray-900">
+                      <span>{c.guestLabel}</span>
+                      {c.clientAlias && (
+                        <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-amber-300">
+                          Custom ID
+                        </span>
+                      )}
+                    </div>
+                    {c.walletAddress && (
+                      <div className="flex items-center gap-1 text-[11px] font-mono text-teal-700">
+                        <span>{c.walletAddress.slice(0, 6)}...{c.walletAddress.slice(-4)}</span>
+                        <Link
+                          href={`/admin/users?wallet=${c.walletAddress}`}
+                          className="hover:underline text-[10px] text-teal-600 ml-1 font-sans font-semibold"
+                          title="View user details"
+                        >
+                          User Profile
+                        </Link>
+                      </div>
+                    )}
+                    {c.customNote && (
+                      <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 mt-0.5 max-w-[200px] truncate" title={c.customNote}>
+                        📝 {c.customNote}
+                      </div>
+                    )}
+                  </div>
+                </td>
                 <td>
                   <span className="bg-gray-100 text-gray-700 font-medium px-2 py-0.5 rounded text-[10px] border border-gray-200">
                     {c.source}

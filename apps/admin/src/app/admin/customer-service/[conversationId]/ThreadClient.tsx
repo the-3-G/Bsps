@@ -1,12 +1,10 @@
-'use client';
-
 import React, { useState, useEffect, useRef } from 'react';
 import { PageHeader, StatusBadge } from '../../../../components/ui/Reusables';
-import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle } from 'lucide-react';
+import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle, Copy, Check, Sparkles, Tag, StickyNote } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getFirebaseFirestore, getFirebaseFunctions, getFirebaseAuth } from '@bspc/firebase';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 interface ThreadMessage {
@@ -21,6 +19,9 @@ interface ConvDetails {
   conversationId: string;
   guestLabel: string;
   guestId: string;
+  walletAddress?: string;
+  clientAlias?: string;
+  customNote?: string;
   source: string;
   status: 'waiting' | 'assigned' | 'active' | 'closed' | 'blocked';
   assignedAgentUid?: string;
@@ -39,6 +40,13 @@ export function ThreadClient() {
   const [notesList, setNotesList] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Client ID name and custom note states
+  const [editingAlias, setEditingAlias] = useState('');
+  const [editingNote, setEditingNote] = useState('');
+  const [isSavingAlias, setIsSavingAlias] = useState(false);
+  const [aliasSavedMsg, setAliasSavedMsg] = useState<string | null>(null);
+  const [copiedWallet, setCopiedWallet] = useState(false);
+
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
 
@@ -47,7 +55,10 @@ export function ThreadClient() {
     if (useMock || !conversationId) {
       setConvDetails({
         conversationId: 'conv-8921',
-        guestLabel: 'Guest 4821',
+        guestLabel: 'User_4765 (0x16db...4765)',
+        clientAlias: 'Argalw Addis',
+        walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+        customNote: 'VIP member requesting node voucher',
         guestId: 'guest-mock',
         source: 'receive_voucher',
         status: 'active',
@@ -55,6 +66,8 @@ export function ThreadClient() {
         subject: 'Voucher Request',
         createdAtTime: 'Today 10:15 AM',
       });
+      setEditingAlias('Argalw Addis');
+      setEditingNote('VIP member requesting node voucher');
       setMessages([
         {
           id: 'm1',
@@ -65,8 +78,8 @@ export function ThreadClient() {
         },
         {
           id: 'm2',
-          senderType: 'guest',
-          senderName: 'Guest 4821',
+          senderType: 'user',
+          senderName: 'Argalw Addis',
           text: 'Hello. I would like to inquire about the voucher eligibility for node staking.',
           timestamp: '10:16 AM',
         },
@@ -86,9 +99,16 @@ export function ThreadClient() {
       const unsubConv = onSnapshot(convDocRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
+          const walletAddr = data.walletAddress || (data.userUid?.startsWith('0x') ? data.userUid : '') || '';
+          const alias = data.clientAlias || data.idName || '';
+          const fallbackLabel = walletAddr ? `User_${walletAddr.slice(-4).toUpperCase()}` : (data.guestLabel || `Guest ${data.guestId?.slice(-4) || ''}`);
+
           setConvDetails({
             conversationId: snap.id,
-            guestLabel: data.guestLabel || `Guest ${data.guestId?.slice(-4) || ''}`,
+            guestLabel: alias || fallbackLabel,
+            clientAlias: alias,
+            walletAddress: walletAddr,
+            customNote: data.customNote || '',
             guestId: data.guestId || '',
             source: data.source || 'general_support',
             status: data.status || 'waiting',
@@ -98,6 +118,14 @@ export function ThreadClient() {
               ? data.createdAt.toDate().toLocaleString()
               : 'Recently',
           });
+          if (alias) {
+            setEditingAlias(alias);
+          } else if (walletAddr) {
+            setEditingAlias((prev) => prev || `User_${walletAddr.slice(-4).toUpperCase()}`);
+          }
+          if (data.customNote) {
+            setEditingNote(data.customNote);
+          }
         }
       });
 
@@ -108,10 +136,24 @@ export function ThreadClient() {
         const list: ThreadMessage[] = [];
         snapshot.forEach((d) => {
           const data = d.data();
+          let sName = 'Guest';
+          if (data.senderType === 'agent') {
+            sName = 'Agent Support';
+          } else if (data.senderType === 'system') {
+            sName = 'System';
+          } else if (data.senderName) {
+            sName = data.senderName;
+          } else if (data.senderWalletAddress || (data.senderUid && data.senderUid.startsWith('0x'))) {
+            const w = data.senderWalletAddress || data.senderUid;
+            sName = `User_${w.slice(-4).toUpperCase()}`;
+          } else if (data.senderUid) {
+            sName = `Guest ${data.senderUid.slice(-4).toUpperCase()}`;
+          }
+
           list.push({
             id: d.id,
             senderType: data.senderType || 'guest',
-            senderName: data.senderType === 'agent' ? 'Agent Support' : data.senderType === 'system' ? 'System' : data.senderUid?.slice(-4).toUpperCase() ? `Guest ${data.senderUid?.slice(-4).toUpperCase()}` : 'Guest',
+            senderName: sName,
             text: data.text || '',
             timestamp: data.createdAt?.toDate
               ? data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -141,6 +183,72 @@ export function ThreadClient() {
       console.error('Failed to setup thread subscription:', e);
     }
   }, [conversationId]);
+
+  const handleSaveClientAliasAndNote = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!conversationId) return;
+
+    setIsSavingAlias(true);
+    setAliasSavedMsg(null);
+
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setConvDetails((prev) =>
+        prev
+          ? {
+              ...prev,
+              clientAlias: editingAlias.trim(),
+              guestLabel: editingAlias.trim() || prev.guestLabel,
+              customNote: editingNote.trim(),
+            }
+          : null
+      );
+      setAliasSavedMsg('✓ Client ID & Note saved!');
+      setIsSavingAlias(false);
+      setTimeout(() => setAliasSavedMsg(null), 3500);
+      return;
+    }
+
+    try {
+      const db = getFirebaseFirestore();
+      const convDocRef = doc(db, 'chatConversations', conversationId);
+      const trimmedAlias = editingAlias.trim();
+      const trimmedNote = editingNote.trim();
+
+      const convUpdates: Record<string, any> = {
+        clientAlias: trimmedAlias || null,
+        guestLabel: trimmedAlias || (convDetails?.walletAddress ? `User_${convDetails.walletAddress.slice(-4).toUpperCase()}` : convDetails?.guestLabel || 'Guest'),
+        customNote: trimmedNote || null,
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(convDocRef, convUpdates);
+
+      // If user has a wallet address, sync alias & note to their users doc as well
+      const walletAddr = convDetails?.walletAddress;
+      if (walletAddr) {
+        const uid = walletAddr.toLowerCase();
+        const userDocRef = doc(db, 'users', uid);
+        await setDoc(
+          userDocRef,
+          {
+            username: trimmedAlias || `User_${uid.slice(-4).toUpperCase()}`,
+            clientAlias: trimmedAlias || null,
+            adminNote: trimmedNote || null,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      setAliasSavedMsg('✓ Client ID & Note saved!');
+      setTimeout(() => setAliasSavedMsg(null), 3500);
+    } catch (err) {
+      console.error('Failed to save client alias/note:', err);
+      setErrorMessage('Failed to save client ID note.');
+    } finally {
+      setIsSavingAlias(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setReplyText(e.target.value);
@@ -439,16 +547,111 @@ export function ThreadClient() {
 
         {/* Sidebar Info & Notes (1 col) */}
         <div className="space-y-4">
+          {/* Client Identity & Identification Note Box */}
           <div className="bg-white rounded border border-gray-200 p-4 space-y-3 shadow-sm text-xs">
-            <div className="font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-1.5">
-              <UserCheck className="w-4 h-4 text-teal-600" /> Guest Details
+            <div className="font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-teal-600" /> Client Identity & Identification
+              </div>
+              {convDetails?.clientAlias && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-300">
+                  Identified
+                </span>
+              )}
             </div>
-            <div className="space-y-1.5 font-mono text-[11px] text-gray-600">
-              <div><span className="text-gray-400">Guest ID:</span> {convDetails?.guestLabel || 'Guest'}</div>
+
+            {aliasSavedMsg && (
+              <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] rounded font-semibold text-center">
+                {aliasSavedMsg}
+              </div>
+            )}
+
+            {/* Wallet Address Display */}
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                Connected Wallet Address
+              </label>
+              {convDetails?.walletAddress ? (
+                <div className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded text-[11px] font-mono text-slate-800">
+                  <span className="truncate mr-1 font-bold text-teal-800" title={convDetails.walletAddress}>
+                    {convDetails.walletAddress}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => {
+                        if (convDetails.walletAddress) {
+                          navigator.clipboard.writeText(convDetails.walletAddress);
+                          setCopiedWallet(true);
+                          setTimeout(() => setCopiedWallet(false), 2000);
+                        }
+                      }}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors"
+                      title="Copy Address"
+                    >
+                      {copiedWallet ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                    <Link
+                      href={`/admin/users?wallet=${convDetails.walletAddress}`}
+                      className="text-[10px] bg-teal-600 hover:bg-teal-700 text-white font-sans font-bold px-2 py-0.5 rounded transition-colors"
+                    >
+                      Profile
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 bg-gray-50 border border-dashed border-gray-200 rounded text-[11px] text-gray-500 italic">
+                  Guest session (No wallet connected yet)
+                </div>
+              )}
+            </div>
+
+            {/* Custom Client ID Name / Alias Input */}
+            <form onSubmit={handleSaveClientAliasAndNote} className="space-y-3 pt-1">
+              <div>
+                <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <Tag className="w-3 h-3 text-amber-600" /> Client ID Name / Alias
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Argalw Addis, VIP Client #1..."
+                  value={editingAlias}
+                  onChange={(e) => setEditingAlias(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs text-gray-900 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <span className="text-[10px] text-gray-400 block mt-0.5">
+                  Give an ID name to recognize this client across support and user records.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <StickyNote className="w-3 h-3 text-teal-600" /> Client Identification Note
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Contact info, VIP terms, or identification note..."
+                  value={editingNote}
+                  onChange={(e) => setEditingNote(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingAlias}
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-1.5 rounded transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                {isSavingAlias ? 'Saving...' : 'Save Client ID & Note'}
+              </button>
+            </form>
+
+            <div className="pt-2 border-t border-gray-100 space-y-1 font-mono text-[10px] text-gray-500">
               <div><span className="text-gray-400">UID:</span> {convDetails?.guestId?.slice(0, 16)}...</div>
               <div><span className="text-gray-400">Source:</span> {convDetails?.source}</div>
               <div><span className="text-gray-400">Created:</span> {convDetails?.createdAtTime}</div>
             </div>
+
             {convDetails?.status !== 'blocked' && (
               <div className="pt-2 flex flex-col gap-2">
                 {convDetails?.status === 'closed' ? (

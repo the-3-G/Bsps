@@ -5,6 +5,7 @@ import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2 } from 'lucide-re
 import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { useWeb3 } from '../context/Web3Context';
 
 import { httpsCallable } from 'firebase/functions';
 
@@ -23,6 +24,7 @@ interface ChatDrawerProps {
 }
 
 export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' }: ChatDrawerProps) {
+  const { address } = useWeb3();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [guestLabel, setGuestLabel] = useState('Guest');
@@ -72,7 +74,9 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     if (uidToUse) {
       setUserUid(uidToUse);
       const shortCode = uidToUse.slice(-4).toUpperCase();
-      setGuestLabel(`Guest ${shortCode}`);
+      const currentWallet = address || null;
+      const initialLabel = currentWallet ? `User_${currentWallet.slice(-4).toUpperCase()}` : `Guest ${shortCode}`;
+      setGuestLabel(initialLabel);
 
       // Try to retrieve and verify stored conversation ID
       const storedConvId = localStorage.getItem('bspc_support_conversation_id');
@@ -85,9 +89,19 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
           if (convSnap.exists()) {
             const data = convSnap.data();
             // Verify ownership
-            if (data.guestId === uidToUse || data.authenticatedUid === uidToUse) {
+            if (data.guestId === uidToUse || data.authenticatedUid === uidToUse || (currentWallet && data.walletAddress?.toLowerCase() === currentWallet.toLowerCase())) {
               validConvId = storedConvId;
               setStatus(data.status);
+
+              // Update wallet address if connected
+              if (currentWallet && (!data.walletAddress || data.walletAddress.toLowerCase() !== currentWallet.toLowerCase())) {
+                updateDoc(convDocRef, {
+                  walletAddress: currentWallet,
+                  walletAddressLowercase: currentWallet.toLowerCase(),
+                  userUid: currentWallet.toLowerCase(),
+                  updatedAt: serverTimestamp(),
+                }).catch(() => {});
+              }
             }
           }
         } catch (e) {
@@ -111,7 +125,10 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
           await setDoc(newConvRef, {
             guestId: uidToUse,
             authenticatedUid: uidToUse,
-            guestLabel: `Guest ${shortCode}`,
+            walletAddress: currentWallet,
+            walletAddressLowercase: currentWallet ? currentWallet.toLowerCase() : null,
+            userUid: currentWallet ? currentWallet.toLowerCase() : uidToUse,
+            guestLabel: initialLabel,
             status: 'waiting',
             assignedAgentUid: null,
             source: initialSource,
@@ -275,11 +292,16 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
 
     try {
       const msgsRef = collection(db, 'chatConversations', activeConvId, 'messages');
+      const senderUidToSave = address ? address.toLowerCase() : (userUid || 'unknown');
+      const senderNameToSave = address ? `User_${address.slice(-4).toUpperCase()}` : guestLabel;
+
       // Direct Firestore message write
       await addDoc(msgsRef, {
         conversationId: activeConvId,
-        senderType: 'guest',
-        senderUid: userUid || 'unknown',
+        senderType: address ? 'user' : 'guest',
+        senderUid: senderUidToSave,
+        senderName: senderNameToSave,
+        senderWalletAddress: address || null,
         messageType: 'text',
         text: cleanText,
         createdAt: serverTimestamp(),
@@ -292,6 +314,11 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         agentUnreadCount: increment(1),
         updatedAt: serverTimestamp(),
       };
+      if (address) {
+        convUpdates.walletAddress = address;
+        convUpdates.walletAddressLowercase = address.toLowerCase();
+        convUpdates.userUid = address.toLowerCase();
+      }
       if (status === 'closed') {
         convUpdates.status = 'active';
       }
