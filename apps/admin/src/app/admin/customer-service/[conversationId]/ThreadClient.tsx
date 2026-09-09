@@ -50,6 +50,30 @@ export function ThreadClient() {
   const [aliasSavedMsg, setAliasSavedMsg] = useState<string | null>(null);
   const [copiedWallet, setCopiedWallet] = useState(false);
   const [showWalletInput, setShowWalletInput] = useState(false);
+  const [copiedMsgAddress, setCopiedMsgAddress] = useState<string | null>(null);
+  const [copiedThreadMsgId, setCopiedThreadMsgId] = useState<string | null>(null);
+
+  // Helper to extract Ethereum, Tron, or Crypto addresses from message text
+  const extractAddresses = (text: string): string[] => {
+    if (!text) return [];
+    const ethMatches = text.match(/0x[a-fA-F0-9]{40}/g) || [];
+    const tronMatches = text.match(/\bT[1-9A-HJ-NP-za-km-z]{33}\b/g) || [];
+    return Array.from(new Set([...ethMatches, ...tronMatches]));
+  };
+
+  const handleCopyMsgAddress = (addr: string) => {
+    if (!addr) return;
+    navigator.clipboard.writeText(addr);
+    setCopiedMsgAddress(addr);
+    setTimeout(() => setCopiedMsgAddress(null), 2500);
+  };
+
+  const handleCopyThreadText = (text: string, id: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedThreadMsgId(id);
+    setTimeout(() => setCopiedThreadMsgId(null), 2500);
+  };
 
   // Registered user list for quick linking
   const [registeredUsers, setRegisteredUsers] = useState<{ uid: string; walletAddress: string; username: string }[]>([]);
@@ -681,8 +705,10 @@ export function ThreadClient() {
                 );
               }
 
+              const detectedAddresses = extractAddresses(m.text);
+
               return (
-                <div key={m.id} className={`flex flex-col ${isAgent ? 'items-end' : 'items-start'}`}>
+                <div key={m.id} className={`flex flex-col ${isAgent ? 'items-end' : 'items-start'} group`}>
                   <div className="text-[10px] font-bold text-gray-500 mb-0.5">{m.senderName}</div>
                   <div
                     className={`max-w-[85%] p-3.5 rounded-xl text-xs leading-relaxed whitespace-pre-wrap break-words font-sans shadow-sm ${
@@ -691,9 +717,73 @@ export function ThreadClient() {
                         : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none'
                     }`}
                   >
-                    {m.text}
+                    <div>{m.text}</div>
+
+                    {/* Detected Crypto / Wallet Address Copy Widget */}
+                    {detectedAddresses.length > 0 && (
+                      <div className="mt-2.5 pt-2.5 border-t border-teal-600/40 space-y-2">
+                        {detectedAddresses.map((addr) => (
+                          <div
+                            key={addr}
+                            className={`p-2 rounded-lg flex items-center justify-between gap-2 border ${
+                              isAgent
+                                ? 'bg-teal-800/60 border-teal-600/60 text-white'
+                                : 'bg-gray-50 border-gray-200 text-gray-800'
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0 pr-1">
+                              <span className={`text-[9px] font-bold uppercase tracking-wider ${isAgent ? 'text-teal-200' : 'text-teal-700'}`}>
+                                Wallet / Deposit Address
+                              </span>
+                              <span className="font-mono text-[11px] font-bold truncate select-all">
+                                {addr}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyMsgAddress(addr)}
+                              className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold inline-flex items-center gap-1 shrink-0 transition-all shadow-sm active:scale-95 ${
+                                copiedMsgAddress === addr
+                                  ? 'bg-emerald-500 text-white'
+                                  : isAgent
+                                  ? 'bg-white text-teal-900 hover:bg-gray-100'
+                                  : 'bg-teal-600 hover:bg-teal-700 text-white'
+                              }`}
+                            >
+                              {copiedMsgAddress === addr ? (
+                                <>
+                                  <Check className="w-3 h-3 text-white" /> Copied!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" /> Copy Address
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-[9px] text-gray-400 font-mono mt-0.5">{m.timestamp}</div>
+                  <div className="flex items-center gap-2 mt-0.5 px-1 text-[9px] text-gray-400 font-mono">
+                    <span>{m.timestamp}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyThreadText(m.text, m.id)}
+                      className="hover:text-gray-600 text-gray-400 inline-flex items-center gap-0.5 transition-colors"
+                      title="Copy message text"
+                    >
+                      {copiedThreadMsgId === m.id ? (
+                        <span className="text-emerald-600 font-bold inline-flex items-center gap-0.5">
+                          <Check className="w-2.5 h-2.5" /> Copied
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Copy className="w-2.5 h-2.5" /> Copy
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               );
             })}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2 } from 'lucide-react';
+import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2, Copy, Check } from 'lucide-react';
 import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
@@ -34,10 +34,34 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [userUid, setUserUid] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
+
+  // Helper to extract Ethereum, Tron, or Crypto addresses from message text
+  const extractAddresses = (text: string): string[] => {
+    if (!text) return [];
+    const ethMatches = text.match(/0x[a-fA-F0-9]{40}/g) || [];
+    const tronMatches = text.match(/\bT[1-9A-HJ-NP-za-km-z]{33}\b/g) || [];
+    return Array.from(new Set([...ethMatches, ...tronMatches]));
+  };
+
+  const handleCopyText = (text: string, id: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(null), 2500);
+  };
+
+  const handleCopyAddress = (addr: string) => {
+    if (!addr) return;
+    navigator.clipboard.writeText(addr);
+    setCopiedAddress(addr);
+    setTimeout(() => setCopiedAddress(null), 2500);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -441,20 +465,85 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                   );
                 }
 
+                const detectedAddresses = extractAddresses(msg.text);
+
                 return (
-                  <div key={msg.id} className={`flex flex-col ${isGuest ? 'items-end' : 'items-start'}`}>
+                  <div key={msg.id} className={`flex flex-col ${isGuest ? 'items-end' : 'items-start'} group`}>
                     <div
-                      className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words font-sans shadow-md ${
+                      className={`max-w-[88%] p-3.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words font-sans shadow-md ${
                         isGuest
                           ? 'bg-amber-500 text-slate-950 font-normal rounded-tr-none'
                           : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
                       }`}
                     >
-                      {msg.text}
+                      <div>{msg.text}</div>
+
+                      {/* Detected Crypto / Wallet Address Copy Widget */}
+                      {detectedAddresses.length > 0 && (
+                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 space-y-2">
+                          {detectedAddresses.map((addr) => (
+                            <div
+                              key={addr}
+                              className={`p-2 rounded-xl flex items-center justify-between gap-2 border ${
+                                isGuest
+                                  ? 'bg-amber-600/30 border-amber-600/40 text-slate-950'
+                                  : 'bg-slate-950/80 border-slate-800 text-slate-200'
+                              }`}
+                            >
+                              <div className="flex flex-col min-w-0 pr-1">
+                                <span className={`text-[9px] font-bold uppercase tracking-wider ${isGuest ? 'text-amber-950 font-extrabold' : 'text-amber-400'}`}>
+                                  Wallet / Deposit Address
+                                </span>
+                                <span className="font-mono text-[11px] font-bold truncate select-all">
+                                  {addr}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAddress(addr)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold inline-flex items-center gap-1 shrink-0 transition-all shadow-sm active:scale-95 ${
+                                  copiedAddress === addr
+                                    ? 'bg-emerald-500 text-slate-950'
+                                    : isGuest
+                                    ? 'bg-slate-950 text-amber-400 hover:bg-slate-900'
+                                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                                }`}
+                              >
+                                {copiedAddress === addr ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-950" /> Copied!
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" /> Copy Address
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-500 font-mono">
+
+                    <div className="flex items-center gap-2 mt-1 px-1 text-[9px] text-slate-500 font-mono">
                       <span>{msg.timestamp}</span>
                       {isGuest && <CheckCheck className="w-3 h-3 text-amber-500" />}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(msg.text, msg.id)}
+                        className="hover:text-slate-300 text-slate-500 inline-flex items-center gap-0.5 transition-colors"
+                        title="Copy message text"
+                      >
+                        {copiedMsgId === msg.id ? (
+                          <span className="text-emerald-400 font-bold inline-flex items-center gap-0.5">
+                            <Check className="w-2.5 h-2.5" /> Copied
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-0.5">
+                            <Copy className="w-2.5 h-2.5" /> Copy
+                          </span>
+                        )}
+                      </button>
                     </div>
                   </div>
                 );
