@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PageHeader, StatusBadge } from '../../../../components/ui/Reusables';
-import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle, Copy, Check, Sparkles, Tag, StickyNote } from 'lucide-react';
+import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle, Copy, Check, Sparkles, Tag, StickyNote, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getFirebaseFirestore, getFirebaseFunctions, getFirebaseAuth } from '@bspc/firebase';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, setDoc, addDoc, serverTimestamp, where, getDocs, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 interface ThreadMessage {
@@ -46,6 +46,17 @@ export function ThreadClient() {
   const [isSavingAlias, setIsSavingAlias] = useState(false);
   const [aliasSavedMsg, setAliasSavedMsg] = useState<string | null>(null);
   const [copiedWallet, setCopiedWallet] = useState(false);
+
+  // Suggested match state for unlinked guest tickets
+  interface SuggestedUser {
+    uid: string;
+    walletAddress: string;
+    username: string;
+    registrationTime: Date;
+    timeDiffLabel: string;
+  }
+  const [suggestedMatches, setSuggestedMatches] = useState<SuggestedUser[]>([]);
+  const [isLinkingUser, setIsLinkingUser] = useState(false);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
@@ -183,6 +194,96 @@ export function ThreadClient() {
       console.error('Failed to setup thread subscription:', e);
     }
   }, [conversationId]);
+
+  // Query for suggested user matches when ticket has no wallet address
+  useEffect(() => {
+    if (!convDetails || convDetails.walletAddress || !convDetails.createdAtTime) return;
+    if (process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true') {
+      setSuggestedMatches([{
+        uid: 'evm_16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+        walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+        username: 'User_4765',
+        registrationTime: new Date(),
+        timeDiffLabel: '3 min after ticket',
+      }]);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      try {
+        const db = getFirebaseFirestore();
+        const ticketTime = new Date(convDetails.createdAtTime!);
+        if (isNaN(ticketTime.getTime())) return;
+
+        const windowMs = 5 * 60 * 1000; // 5 minutes
+        const startTime = Timestamp.fromDate(new Date(ticketTime.getTime() - windowMs));
+        const endTime = Timestamp.fromDate(new Date(ticketTime.getTime() + windowMs));
+
+        const usersRef = collection(db, 'users');
+        const q = query(
+          usersRef,
+          where('registrationTime', '>=', startTime),
+          where('registrationTime', '<=', endTime),
+          orderBy('registrationTime', 'asc'),
+          limit(5)
+        );
+
+        const snapshot = await getDocs(q);
+        const matches: SuggestedUser[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          const wallet = data.walletAddress || '';
+          if (!wallet) return;
+
+          const regTime = data.registrationTime?.toDate?.() || new Date();
+          const diffMs = regTime.getTime() - ticketTime.getTime();
+          const diffMin = Math.round(Math.abs(diffMs) / 60000);
+          const direction = diffMs >= 0 ? 'after' : 'before';
+          const timeDiffLabel = diffMin === 0 ? 'same time as ticket' : `${diffMin} min ${direction} ticket`;
+
+          matches.push({
+            uid: d.id,
+            walletAddress: wallet,
+            username: data.username || `User_${wallet.slice(-4).toUpperCase()}`,
+            registrationTime: regTime,
+            timeDiffLabel,
+          });
+        });
+        setSuggestedMatches(matches);
+      } catch (err) {
+        console.warn('Failed to fetch suggested matches:', err);
+      }
+    };
+
+    fetchSuggestions();
+  }, [convDetails?.walletAddress, convDetails?.createdAtTime]);
+
+  // Handle linking a suggested user to this conversation
+  const handleLinkSuggestedUser = async (user: SuggestedUser) => {
+    if (!conversationId) return;
+    setIsLinkingUser(true);
+    try {
+      const db = getFirebaseFirestore();
+      const convDocRef = doc(db, 'chatConversations', conversationId);
+      await updateDoc(convDocRef, {
+        walletAddress: user.walletAddress,
+        walletAddressLowercase: user.walletAddress.toLowerCase(),
+        userUid: user.walletAddress.toLowerCase(),
+        guestLabel: user.username,
+        clientAlias: user.username,
+        updatedAt: serverTimestamp(),
+      });
+      setEditingAlias(user.username);
+      setSuggestedMatches([]);
+      setAliasSavedMsg(`✓ Linked to ${user.username}`);
+      setTimeout(() => setAliasSavedMsg(null), 3500);
+    } catch (err) {
+      console.error('Failed to link suggested user:', err);
+      setErrorMessage('Failed to link user to conversation.');
+    } finally {
+      setIsLinkingUser(false);
+    }
+  };
 
   const handleSaveClientAliasAndNote = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -599,8 +700,40 @@ export function ThreadClient() {
                   </div>
                 </div>
               ) : (
-                <div className="p-2 bg-gray-50 border border-dashed border-gray-200 rounded text-[11px] text-gray-500 italic">
-                  Guest session (No wallet connected yet)
+                <div className="space-y-2">
+                  <div className="p-2 bg-gray-50 border border-dashed border-gray-200 rounded text-[11px] text-gray-500 italic">
+                    Guest session (No wallet connected yet)
+                  </div>
+                  {suggestedMatches.length > 0 && (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded space-y-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+                        <Search className="w-3 h-3" /> Suggested Matches
+                      </div>
+                      <div className="text-[10px] text-amber-700">
+                        Users who registered around the same time as this ticket:
+                      </div>
+                      {suggestedMatches.map((user) => (
+                        <div key={user.uid} className="p-2 bg-white border border-amber-200 rounded flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-gray-900 truncate">{user.username}</div>
+                            <div className="text-[10px] font-mono text-gray-500 truncate" title={user.walletAddress}>
+                              {user.walletAddress.slice(0, 8)}...{user.walletAddress.slice(-6)}
+                            </div>
+                            <div className="text-[9px] text-amber-600 font-semibold mt-0.5">
+                              ⏱ {user.timeDiffLabel}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleLinkSuggestedUser(user)}
+                            disabled={isLinkingUser}
+                            className="shrink-0 text-[10px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1 rounded transition-colors disabled:opacity-50"
+                          >
+                            {isLinkingUser ? '...' : 'Link'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

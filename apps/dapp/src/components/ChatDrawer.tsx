@@ -183,7 +183,34 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     };
   }, [isOpen]);
 
+  // Auto-link wallet address to existing guest conversation when user connects wallet
+  useEffect(() => {
+    if (!address) return;
 
+    const storedConvId = localStorage.getItem('bspc_support_conversation_id');
+    if (!storedConvId) return;
+
+    try {
+      const db = getFirebaseFirestore();
+      const convDocRef = doc(db, 'chatConversations', storedConvId);
+
+      const walletLabel = `User_${address.slice(-4).toUpperCase()}`;
+
+      updateDoc(convDocRef, {
+        walletAddress: address,
+        walletAddressLowercase: address.toLowerCase(),
+        userUid: address.toLowerCase(),
+        guestLabel: walletLabel,
+        updatedAt: serverTimestamp(),
+      }).then(() => {
+        setGuestLabel(walletLabel);
+      }).catch((err) => {
+        console.warn('Auto-link wallet to conversation failed:', err);
+      });
+    } catch (err) {
+      console.warn('Auto-link wallet error:', err);
+    }
+  }, [address]);
 
   // Real-time Firestore Subscriptions (Conversation status and Messages)
   useEffect(() => {
