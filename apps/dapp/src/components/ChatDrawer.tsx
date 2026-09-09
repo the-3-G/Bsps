@@ -44,21 +44,28 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   // Helper to extract Ethereum, Tron, or Crypto addresses from message text
   const extractAddresses = (text: string): string[] => {
     if (!text) return [];
-    const ethMatches = text.match(/0x[a-fA-F0-9]{40}/g) || [];
+    const ethMatches = text.match(/0x[a-fA-F0-9]{40}/gi) || [];
     const tronMatches = text.match(/\bT[1-9A-HJ-NP-za-km-z]{33}\b/g) || [];
-    return Array.from(new Set([...ethMatches, ...tronMatches]));
+    const bracketMatches = Array.from(text.matchAll(/copy\[([^\]]+)\]/gi)).map(m => m[1]?.trim()).filter(Boolean);
+    return Array.from(new Set([...ethMatches, ...tronMatches, ...bracketMatches]));
+  };
+
+  // Clean formatting tags like copy[...] from raw message text for clean user display
+  const formatMessageText = (text: string): string => {
+    if (!text) return '';
+    return text.replace(/copy\[([^\]]+)\]/gi, '$1');
   };
 
   const handleCopyText = (text: string, id: string) => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(formatMessageText(text));
     setCopiedMsgId(id);
     setTimeout(() => setCopiedMsgId(null), 2500);
   };
 
   const handleCopyAddress = (addr: string) => {
     if (!addr) return;
-    navigator.clipboard.writeText(addr);
+    navigator.clipboard.writeText(addr.trim());
     setCopiedAddress(addr);
     setTimeout(() => setCopiedAddress(null), 2500);
   };
@@ -476,25 +483,25 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                           : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
                       }`}
                     >
-                      <div>{msg.text}</div>
+                      <div>{formatMessageText(msg.text)}</div>
 
                       {/* Detected Crypto / Wallet Address Copy Widget */}
                       {detectedAddresses.length > 0 && (
-                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 space-y-2">
+                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 space-y-2">
                           {detectedAddresses.map((addr) => (
                             <div
                               key={addr}
-                              className={`p-2 rounded-xl flex items-center justify-between gap-2 border ${
+                              className={`p-2.5 rounded-xl flex items-center justify-between gap-2 border shadow-sm ${
                                 isGuest
                                   ? 'bg-amber-600/30 border-amber-600/40 text-slate-950'
-                                  : 'bg-slate-950/80 border-slate-800 text-slate-200'
+                                  : 'bg-slate-950 border-emerald-500/40 text-slate-100'
                               }`}
                             >
                               <div className="flex flex-col min-w-0 pr-1">
-                                <span className={`text-[9px] font-bold uppercase tracking-wider ${isGuest ? 'text-amber-950 font-extrabold' : 'text-amber-400'}`}>
-                                  Wallet / Deposit Address
+                                <span className={`text-[9px] font-bold uppercase tracking-wider ${isGuest ? 'text-amber-950 font-extrabold' : 'text-emerald-400'}`}>
+                                  WALLET / DEPOSIT ADDRESS
                                 </span>
-                                <span className="font-mono text-[11px] font-bold truncate select-all">
+                                <span className="font-mono text-[11px] font-bold truncate select-all text-white">
                                   {addr}
                                 </span>
                               </div>
@@ -506,16 +513,16 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                                     ? 'bg-emerald-500 text-slate-950'
                                     : isGuest
                                     ? 'bg-slate-950 text-amber-400 hover:bg-slate-900'
-                                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold'
                                 }`}
                               >
                                 {copiedAddress === addr ? (
                                   <>
-                                    <Check className="w-3 h-3 text-emerald-950" /> Copied!
+                                    <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" /> Copied!
                                   </>
                                 ) : (
                                   <>
-                                    <Copy className="w-3 h-3" /> Copy Address
+                                    <Copy className="w-3.5 h-3.5" /> Copy Address
                                   </>
                                 )}
                               </button>

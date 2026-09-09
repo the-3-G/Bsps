@@ -56,21 +56,28 @@ export function ThreadClient() {
   // Helper to extract Ethereum, Tron, or Crypto addresses from message text
   const extractAddresses = (text: string): string[] => {
     if (!text) return [];
-    const ethMatches = text.match(/0x[a-fA-F0-9]{40}/g) || [];
+    const ethMatches = text.match(/0x[a-fA-F0-9]{40}/gi) || [];
     const tronMatches = text.match(/\bT[1-9A-HJ-NP-za-km-z]{33}\b/g) || [];
-    return Array.from(new Set([...ethMatches, ...tronMatches]));
+    const bracketMatches = Array.from(text.matchAll(/copy\[([^\]]+)\]/gi)).map(m => m[1]?.trim()).filter(Boolean);
+    return Array.from(new Set([...ethMatches, ...tronMatches, ...bracketMatches]));
+  };
+
+  // Clean formatting tags like copy[...] from raw message text for clean display
+  const formatMessageText = (text: string): string => {
+    if (!text) return '';
+    return text.replace(/copy\[([^\]]+)\]/gi, '$1');
   };
 
   const handleCopyMsgAddress = (addr: string) => {
     if (!addr) return;
-    navigator.clipboard.writeText(addr);
+    navigator.clipboard.writeText(addr.trim());
     setCopiedMsgAddress(addr);
     setTimeout(() => setCopiedMsgAddress(null), 2500);
   };
 
   const handleCopyThreadText = (text: string, id: string) => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(formatMessageText(text));
     setCopiedThreadMsgId(id);
     setTimeout(() => setCopiedThreadMsgId(null), 2500);
   };
@@ -717,7 +724,7 @@ export function ThreadClient() {
                         : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none'
                     }`}
                   >
-                    <div>{m.text}</div>
+                    <div>{formatMessageText(m.text)}</div>
 
                     {/* Detected Crypto / Wallet Address Copy Widget */}
                     {detectedAddresses.length > 0 && (
