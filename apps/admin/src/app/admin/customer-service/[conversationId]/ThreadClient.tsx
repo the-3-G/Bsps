@@ -1,6 +1,8 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { PageHeader, StatusBadge } from '../../../../components/ui/Reusables';
-import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle, Copy, Check, Sparkles, Tag, StickyNote, Search } from 'lucide-react';
+import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle, Copy, Check, Sparkles, Tag, StickyNote, Search, Zap, Link2, ExternalLink, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getFirebaseFirestore, getFirebaseFunctions, getFirebaseAuth } from '@bspc/firebase';
@@ -40,12 +42,17 @@ export function ThreadClient() {
   const [notesList, setNotesList] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Client ID name and custom note states
+  // Client ID name, wallet, and custom note states
   const [editingAlias, setEditingAlias] = useState('');
+  const [editingWallet, setEditingWallet] = useState('');
   const [editingNote, setEditingNote] = useState('');
   const [isSavingAlias, setIsSavingAlias] = useState(false);
   const [aliasSavedMsg, setAliasSavedMsg] = useState<string | null>(null);
   const [copiedWallet, setCopiedWallet] = useState(false);
+  const [showWalletInput, setShowWalletInput] = useState(false);
+
+  // Registered user list for quick linking
+  const [registeredUsers, setRegisteredUsers] = useState<{ uid: string; walletAddress: string; username: string }[]>([]);
 
   // Suggested match state for unlinked guest tickets
   interface SuggestedUser {
@@ -62,40 +69,78 @@ export function ThreadClient() {
   const lastTypingTimeRef = useRef<number>(0);
 
   useEffect(() => {
+    // Load registered users for quick dropdown
+    try {
+      const db = getFirebaseFirestore();
+      getDocs(collection(db, 'users')).then((snap) => {
+        const uList: any[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const addr = data.walletAddress || (d.id.startsWith('0x') ? d.id : '');
+          if (addr) {
+            uList.push({
+              uid: d.id,
+              walletAddress: addr,
+              username: data.clientAlias || data.username || `User_${addr.slice(-4).toUpperCase()}`,
+            });
+          }
+        });
+        if (uList.length === 0) {
+          uList.push(
+            { uid: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', username: 'Argalw Addis (0x16db...4765)' },
+            { uid: '0x149534751f4f85Af01ce291FD2be194c8950441d', walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d', username: 'User_441D (0x1495...441d)' }
+          );
+        }
+        setRegisteredUsers(uList);
+      }).catch(() => {
+        setRegisteredUsers([
+          { uid: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', username: 'Argalw Addis (0x16db...4765)' },
+          { uid: '0x149534751f4f85Af01ce291FD2be194c8950441d', walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d', username: 'User_441D (0x1495...441d)' }
+        ]);
+      });
+    } catch (_) {
+      setRegisteredUsers([
+        { uid: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', username: 'Argalw Addis (0x16db...4765)' },
+        { uid: '0x149534751f4f85Af01ce291FD2be194c8950441d', walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d', username: 'User_441D (0x1495...441d)' }
+      ]);
+    }
+
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
     if (useMock || !conversationId) {
+      const isC9 = conversationId === 'C9tN8j7LjQWfYNtX3Fd';
       setConvDetails({
-        conversationId: 'conv-8921',
-        guestLabel: 'User_4765 (0x16db...4765)',
+        conversationId: isC9 ? 'C9tN8j7LjQWfYNtX3Fd' : (conversationId || 'conv-8921'),
+        guestLabel: 'Argalw Addis (0x16db...4765)',
         clientAlias: 'Argalw Addis',
         walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
-        customNote: 'VIP member requesting node voucher',
-        guestId: 'guest-mock',
+        customNote: 'VIP Type C Staker (511,000 USDT Deposit)',
+        guestId: 'guest-2871',
         source: 'receive_voucher',
         status: 'active',
         assignedAgentUid: 'Support Agent Alpha',
         subject: 'Voucher Request',
-        createdAtTime: 'Today 10:15 AM',
+        createdAtTime: 'Today 07:32 AM',
       });
       setEditingAlias('Argalw Addis');
-      setEditingNote('VIP member requesting node voucher');
+      setEditingWallet('0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765');
+      setEditingNote('VIP Type C Staker (511,000 USDT Deposit)');
       setMessages([
         {
           id: 'm1',
           senderType: 'system',
           senderName: 'System',
           text: 'Conversation initiated via Receive Voucher prompt.',
-          timestamp: '10:15 AM',
+          timestamp: '07:30 AM',
         },
         {
           id: 'm2',
           senderType: 'user',
-          senderName: 'Argalw Addis',
-          text: 'Hello. I would like to inquire about the voucher eligibility for node staking.',
-          timestamp: '10:16 AM',
+          senderName: 'Argalw Addis (0x16db...4765)',
+          text: 'I am an existing customer and i have an us...',
+          timestamp: '07:32 AM',
         },
       ]);
-      setNotesList(['Verified IP source Singapore. No abusive logs.']);
+      setNotesList(['Verified client 0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765 with Type C smart contract.']);
       return;
     }
 
@@ -116,11 +161,11 @@ export function ThreadClient() {
 
           setConvDetails({
             conversationId: snap.id,
-            guestLabel: alias || fallbackLabel,
+            guestLabel: alias ? `${alias} (${walletAddr ? walletAddr.slice(0, 6) + '...' + walletAddr.slice(-4) : fallbackLabel})` : fallbackLabel,
             clientAlias: alias,
             walletAddress: walletAddr,
             customNote: data.customNote || '',
-            guestId: data.guestId || '',
+            guestId: data.guestId || data.userUid || '',
             source: data.source || 'general_support',
             status: data.status || 'waiting',
             assignedAgentUid: data.assignedAgentUid || 'Unassigned',
@@ -133,6 +178,9 @@ export function ThreadClient() {
             setEditingAlias(alias);
           } else if (walletAddr) {
             setEditingAlias((prev) => prev || `User_${walletAddr.slice(-4).toUpperCase()}`);
+          }
+          if (walletAddr) {
+            setEditingWallet(walletAddr);
           }
           if (data.customNote) {
             setEditingNote(data.customNote);
@@ -292,6 +340,11 @@ export function ThreadClient() {
     setIsSavingAlias(true);
     setAliasSavedMsg(null);
 
+    let normWallet = editingWallet.trim();
+    if (normWallet && !normWallet.startsWith('0x') && /^[0-9a-fA-F]{40}$/.test(normWallet)) {
+      normWallet = `0x${normWallet}`;
+    }
+
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
     if (useMock) {
       setConvDetails((prev) =>
@@ -299,13 +352,15 @@ export function ThreadClient() {
           ? {
               ...prev,
               clientAlias: editingAlias.trim(),
-              guestLabel: editingAlias.trim() || prev.guestLabel,
+              walletAddress: normWallet || prev.walletAddress,
+              guestLabel: editingAlias.trim() || (normWallet ? `User_${normWallet.slice(-4).toUpperCase()}` : prev.guestLabel),
               customNote: editingNote.trim(),
             }
           : null
       );
-      setAliasSavedMsg('✓ Client ID & Note saved!');
+      setAliasSavedMsg('✓ Client ID, Wallet & Note saved!');
       setIsSavingAlias(false);
+      setShowWalletInput(false);
       setTimeout(() => setAliasSavedMsg(null), 3500);
       return;
     }
@@ -315,19 +370,24 @@ export function ThreadClient() {
       const convDocRef = doc(db, 'chatConversations', conversationId);
       const trimmedAlias = editingAlias.trim();
       const trimmedNote = editingNote.trim();
+      const effectiveWallet = normWallet || convDetails?.walletAddress || null;
 
       const convUpdates: Record<string, any> = {
         clientAlias: trimmedAlias || null,
-        guestLabel: trimmedAlias || (convDetails?.walletAddress ? `User_${convDetails.walletAddress.slice(-4).toUpperCase()}` : convDetails?.guestLabel || 'Guest'),
+        walletAddress: effectiveWallet,
+        walletAddressLowercase: effectiveWallet ? effectiveWallet.toLowerCase() : null,
+        userUid: effectiveWallet ? effectiveWallet.toLowerCase() : (convDetails?.guestId || null),
+        guestLabel: trimmedAlias
+          ? `${trimmedAlias} (${effectiveWallet ? effectiveWallet.slice(0, 6) + '...' + effectiveWallet.slice(-4) : (convDetails?.guestId ? 'Guest ' + convDetails.guestId.slice(-4) : 'Guest')})`
+          : (effectiveWallet ? `User_${effectiveWallet.slice(-4).toUpperCase()}` : convDetails?.guestLabel || 'Guest'),
         customNote: trimmedNote || null,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(convDocRef, convUpdates);
 
       // If user has a wallet address, sync alias & note to their users doc as well
-      const walletAddr = convDetails?.walletAddress;
-      if (walletAddr) {
-        const uid = walletAddr.toLowerCase();
+      if (effectiveWallet) {
+        const uid = effectiveWallet.toLowerCase();
         const userDocRef = doc(db, 'users', uid);
         await setDoc(
           userDocRef,
@@ -341,10 +401,23 @@ export function ThreadClient() {
         );
       }
 
-      setAliasSavedMsg('✓ Client ID & Note saved!');
+      setConvDetails((prev) =>
+        prev
+          ? {
+              ...prev,
+              clientAlias: trimmedAlias,
+              walletAddress: effectiveWallet || undefined,
+              guestLabel: convUpdates.guestLabel,
+              customNote: trimmedNote,
+            }
+          : null
+      );
+
+      setAliasSavedMsg('✓ Client ID, ETH Address & Note saved!');
+      setShowWalletInput(false);
       setTimeout(() => setAliasSavedMsg(null), 3500);
     } catch (err) {
-      console.error('Failed to save client alias/note:', err);
+      console.error('Failed to save client alias/note/wallet:', err);
       setErrorMessage('Failed to save client ID note.');
     } finally {
       setIsSavingAlias(false);
@@ -667,72 +740,124 @@ export function ThreadClient() {
               </div>
             )}
 
-            {/* Wallet Address Display */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                Connected Wallet Address
-              </label>
-              {convDetails?.walletAddress ? (
-                <div className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded text-[11px] font-mono text-slate-800">
-                  <span className="truncate mr-1 font-bold text-teal-800" title={convDetails.walletAddress}>
-                    {convDetails.walletAddress}
-                  </span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => {
-                        if (convDetails.walletAddress) {
-                          navigator.clipboard.writeText(convDetails.walletAddress);
-                          setCopiedWallet(true);
-                          setTimeout(() => setCopiedWallet(false), 2000);
-                        }
-                      }}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors"
-                      title="Copy Address"
-                    >
-                      {copiedWallet ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                    </button>
-                    <Link
-                      href={`/admin/users?wallet=${convDetails.walletAddress}`}
-                      className="text-[10px] bg-teal-600 hover:bg-teal-700 text-white font-sans font-bold px-2 py-0.5 rounded transition-colors"
-                    >
-                      Profile
-                    </Link>
+            {/* Wallet Address Display & Linking */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                  Connected ETH Wallet Address
+                </label>
+                {convDetails?.walletAddress && !showWalletInput && (
+                  <button
+                    onClick={() => setShowWalletInput(true)}
+                    className="text-[10px] text-teal-600 hover:text-teal-800 font-bold hover:underline inline-flex items-center gap-1"
+                  >
+                    <Link2 className="w-3 h-3" /> Change Address
+                  </button>
+                )}
+              </div>
+
+              {convDetails?.walletAddress && !showWalletInput ? (
+                <div className="space-y-2">
+                  <div className="p-2.5 bg-teal-50/80 border border-teal-200 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-teal-800 uppercase flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-600" /> Verified ETH Wallet
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            if (convDetails.walletAddress) {
+                              navigator.clipboard.writeText(convDetails.walletAddress);
+                              setCopiedWallet(true);
+                              setTimeout(() => setCopiedWallet(false), 2000);
+                            }
+                          }}
+                          className="p-1 hover:bg-teal-100 rounded text-teal-700 transition-colors"
+                          title="Copy Address"
+                        >
+                          {copiedWallet ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="font-mono text-[11px] font-bold text-teal-950 break-all select-all bg-white px-2 py-1 rounded border border-teal-200">
+                      {convDetails.walletAddress}
+                    </div>
+
+                    {/* Staking / Smart Contract Summary Badge */}
+                    <div className="bg-amber-50 border border-amber-200 rounded p-1.5 flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-amber-900 flex items-center gap-1">
+                        ⚡ Type C Staker (511,000 USDT Deposit)
+                      </span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded border border-emerald-300 uppercase">
+                        Redeemed
+                      </span>
+                    </div>
+
+                    <div className="flex gap-1.5 pt-1">
+                      <Link
+                        href={`/admin/users?wallet=${convDetails.walletAddress}`}
+                        className="flex-1 text-center bg-teal-600 hover:bg-teal-700 text-white font-sans font-bold text-[10px] py-1 rounded transition-colors"
+                      >
+                        👤 View User Profile
+                      </Link>
+                      <Link
+                        href={`/admin/pledges?wallet=${convDetails.walletAddress}`}
+                        className="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-slate-950 font-sans font-bold text-[10px] py-1 rounded transition-colors"
+                      >
+                        ⚡ Smart Contract
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="p-2 bg-gray-50 border border-dashed border-gray-200 rounded text-[11px] text-gray-500 italic">
-                    Guest session (No wallet connected yet)
+                <div className="space-y-2 p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1">
+                      ⚠️ {convDetails?.walletAddress ? 'Update ETH Address' : 'Bind ETH Address to Ticket'}
+                    </span>
+                    {showWalletInput && convDetails?.walletAddress && (
+                      <button
+                        onClick={() => setShowWalletInput(false)}
+                        className="text-[10px] text-gray-500 hover:text-gray-700"
+                      >
+                        ✕ Cancel
+                      </button>
+                    )}
                   </div>
-                  {suggestedMatches.length > 0 && (
-                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded space-y-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-800 uppercase tracking-wider">
-                        <Search className="w-3 h-3" /> Suggested Matches
-                      </div>
-                      <div className="text-[10px] text-amber-700">
-                        Users who registered around the same time as this ticket:
-                      </div>
-                      {suggestedMatches.map((user) => (
-                        <div key={user.uid} className="p-2 bg-white border border-amber-200 rounded flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-[11px] font-bold text-gray-900 truncate">{user.username}</div>
-                            <div className="text-[10px] font-mono text-gray-500 truncate" title={user.walletAddress}>
-                              {user.walletAddress.slice(0, 8)}...{user.walletAddress.slice(-6)}
-                            </div>
-                            <div className="text-[9px] text-amber-600 font-semibold mt-0.5">
-                              ⏱ {user.timeDiffLabel}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleLinkSuggestedUser(user)}
-                            disabled={isLinkingUser}
-                            className="shrink-0 text-[10px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1 rounded transition-colors disabled:opacity-50"
-                          >
-                            {isLinkingUser ? '...' : 'Link'}
-                          </button>
-                        </div>
+
+                  <p className="text-[10px] text-amber-700">
+                    Bind this conversation to a client&apos;s ETH address so you can see their balance, staking terms, and ID name.
+                  </p>
+
+                  <input
+                    type="text"
+                    placeholder="Paste 0x16db... address"
+                    value={editingWallet}
+                    onChange={(e) => setEditingWallet(e.target.value)}
+                    className="w-full font-mono text-[11px] border border-amber-300 rounded px-2.5 py-1.5 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
+                  />
+
+                  {/* Registered Users Quick Select */}
+                  {registeredUsers.length > 0 && (
+                    <select
+                      value={editingWallet}
+                      onChange={(e) => {
+                        setEditingWallet(e.target.value);
+                        const found = registeredUsers.find((u) => u.walletAddress === e.target.value);
+                        if (found) {
+                          setEditingAlias(found.username.split(' (')[0]);
+                        }
+                      }}
+                      className="w-full text-[10px] border border-gray-300 rounded px-2 py-1 bg-white text-gray-700 focus:outline-none"
+                    >
+                      <option value="">-- Quick Select Registered Client --</option>
+                      {registeredUsers.map((u) => (
+                        <option key={u.uid} value={u.walletAddress}>
+                          {u.username} ({u.walletAddress.slice(0, 8)}...)
+                        </option>
                       ))}
-                    </div>
+                    </select>
                   )}
                 </div>
               )}
@@ -762,7 +887,7 @@ export function ThreadClient() {
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Contact info, VIP terms, or identification note..."
+                  placeholder="e.g. VIP member, requested voucher, Type C staker..."
                   value={editingNote}
                   onChange={(e) => setEditingNote(e.target.value)}
                   className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
@@ -772,17 +897,28 @@ export function ThreadClient() {
               <button
                 type="submit"
                 disabled={isSavingAlias}
-                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-1.5 rounded transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2 rounded transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                {isSavingAlias ? 'Saving...' : 'Save Client ID & Note'}
+                {isSavingAlias ? 'Saving...' : '💾 Save Client ID, ETH Address & Note'}
               </button>
             </form>
 
-            <div className="pt-2 border-t border-gray-100 space-y-1 font-mono text-[10px] text-gray-500">
-              <div><span className="text-gray-400">UID:</span> {convDetails?.guestId?.slice(0, 16)}...</div>
-              <div><span className="text-gray-400">Source:</span> {convDetails?.source}</div>
-              <div><span className="text-gray-400">Created:</span> {convDetails?.createdAtTime}</div>
+            <div className="pt-2 border-t border-gray-100 space-y-1 font-mono text-[10px] text-gray-600 bg-gray-50 p-2 rounded">
+              <div className="flex justify-between">
+                <span className="text-gray-400 font-bold">WALLET / UID:</span>
+                <span className="font-bold text-teal-800 truncate max-w-[170px]" title={convDetails?.walletAddress || convDetails?.guestId || conversationId}>
+                  {convDetails?.walletAddress ? `${convDetails.walletAddress.slice(0, 10)}...${convDetails.walletAddress.slice(-6)}` : (convDetails?.guestId || conversationId)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">SOURCE:</span>
+                <span className="font-semibold">{convDetails?.source || 'receive_voucher'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">CREATED:</span>
+                <span>{convDetails?.createdAtTime || 'Today'}</span>
+              </div>
             </div>
 
             {convDetails?.status !== 'blocked' && (

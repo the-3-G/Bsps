@@ -21,7 +21,7 @@ import {
 import { userRepository } from '../../../repositories';
 import { DbUser } from '@bspc/types';
 import Link from 'next/link';
-import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink } from 'lucide-react';
+import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink, Sparkles, Plus, Check, X, Zap } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 
@@ -55,6 +55,24 @@ export default function UsersPage() {
   const [drawerNote, setDrawerNote] = useState('');
   const [isSavingDrawerAlias, setIsSavingDrawerAlias] = useState(false);
   const [drawerSaveMsg, setDrawerSaveMsg] = useState<string | null>(null);
+
+  // Smart Contract Modal State
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+  const [contractSaving, setContractSaving] = useState(false);
+  const [contractSuccessMsg, setContractSuccessMsg] = useState('');
+  const [contractFormId, setContractFormId] = useState('p-18');
+  const [contractFormAddress, setContractFormAddress] = useState('');
+  const [contractFormUserId, setContractFormUserId] = useState('');
+  const [contractFormType, setContractFormType] = useState('Type C');
+  const [contractFormDays, setContractFormDays] = useState('70');
+  const [contractFormDeposit, setContractFormDeposit] = useState('511,000');
+  const [contractFormCollected, setContractFormCollected] = useState('14,520');
+  const [contractFormUncollected, setContractFormUncollected] = useState('14,520');
+  const [contractFormRate, setContractFormRate] = useState('2.7%');
+  const [contractFormBonusReward, setContractFormBonusReward] = useState('25.77');
+  const [contractFormReward, setContractFormReward] = useState('92.345 ETH');
+  const [contractFormEndTime, setContractFormEndTime] = useState('2026-09-19');
+  const [contractFormStatus, setContractFormStatus] = useState<'mining' | 'completed' | 'withdrawn' | 'redeemed'>('redeemed');
 
   const [userToToggle, setUserToToggle] = useState<DbUser | null>(null);
   const [actionType, setActionType] = useState<'status' | 'session' | null>(null);
@@ -121,6 +139,158 @@ export default function UsersPage() {
       setDrawerSaveMsg('Failed to save: ' + (err?.message || 'Unknown error'));
     } finally {
       setIsSavingDrawerAlias(false);
+    }
+  };
+
+  const openSmartContractForUser = (u: DbUser) => {
+    const rawAddr = (u.walletAddress || u.uid || '').trim();
+    const normAddr = rawAddr.startsWith('0x') ? rawAddr : `0x${rawAddr}`;
+    setContractFormAddress(normAddr);
+    setContractFormUserId(u.uid || normAddr);
+    setContractFormId('p-18');
+    setContractFormType('Type C');
+    setContractFormDays('70');
+    setContractFormDeposit('511,000');
+    setContractFormCollected('14,520');
+    setContractFormUncollected('14,520');
+    setContractFormRate('2.7%');
+    setContractFormBonusReward('25.77');
+    setContractFormReward('92.345 ETH');
+    setContractFormEndTime('2026-09-19');
+    setContractFormStatus('redeemed');
+    setContractSuccessMsg('');
+    setIsContractModalOpen(true);
+  };
+
+  const handleSaveContractForUser = async () => {
+    setContractSaving(true);
+    setContractSuccessMsg('');
+    try {
+      let normalizedAddress = (contractFormAddress || '').trim();
+      if (normalizedAddress && !normalizedAddress.startsWith('0x') && /^[0-9a-fA-F]{40}$/.test(normalizedAddress)) {
+        normalizedAddress = `0x${normalizedAddress}`;
+      }
+
+      const recordData = {
+        pledgeId: contractFormId,
+        contractId: contractFormId,
+        userUid: contractFormUserId || normalizedAddress || 'u-1001',
+        userId: contractFormUserId || normalizedAddress || 'u-1001',
+        walletAddress: normalizedAddress || '0x...',
+        userAddress: normalizedAddress || '0x...',
+        tier: contractFormType,
+        stakingType: contractFormType,
+        stakingDays: Number(contractFormDays) || 70,
+        deposit: contractFormDeposit,
+        amountThreshold: contractFormDeposit,
+        collectedAmount: contractFormCollected,
+        collectionAmount: contractFormCollected,
+        uncollectedAmount: contractFormUncollected,
+        interestRate: contractFormRate,
+        miningRatio: contractFormRate,
+        reward: contractFormReward,
+        miningReward: contractFormReward,
+        bonusReward: contractFormBonusReward,
+        ethReward: contractFormBonusReward,
+        endTime: contractFormEndTime || new Date().toISOString(),
+        status: contractFormStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        txHash: '0x' + Math.random().toString(16).slice(2, 10),
+      };
+
+      // 1. Save to local storage
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('bspc_admin_custom_pledges');
+          const current = stored ? JSON.parse(stored) : [];
+          const idx = current.findIndex((p: any) => p.id === contractFormId || p.contractId === contractFormId);
+          let updated: any[];
+          if (idx !== -1) {
+            updated = [...current];
+            updated[idx] = recordData;
+          } else {
+            updated = [recordData, ...current];
+          }
+          localStorage.setItem('bspc_admin_custom_pledges', JSON.stringify(updated));
+
+          if (normalizedAddress) {
+            const userKey1 = `bspc_user_overrides_${normalizedAddress.toLowerCase()}`;
+            const userKey2 = `bspc_user_overrides_${normalizedAddress.toLowerCase().replace(/^0x/, '')}`;
+            localStorage.setItem(userKey1, JSON.stringify(recordData));
+            localStorage.setItem(userKey2, JSON.stringify(recordData));
+          }
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: recordData }));
+        } catch (e) {
+          console.warn('Failed to save to localStorage:', e);
+        }
+      }
+
+      // 2. Write to Firestore
+      try {
+        const { getFirebaseAuth } = await import('@bspc/firebase');
+        const { signInAnonymously } = await import('firebase/auth');
+        const auth = getFirebaseAuth();
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (_) {}
+        }
+
+        const db = getFirebaseFirestore();
+        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+        const pledgeDocRef = doc(db, 'pledges', contractFormId);
+        await setDoc(pledgeDocRef, recordData, { merge: true });
+
+        if (contractFormId.startsWith('p-')) {
+          const numericId = contractFormId.slice(2);
+          await setDoc(doc(db, 'pledges', numericId), recordData, { merge: true });
+        }
+
+        if (normalizedAddress) {
+          const totalEth = parseFloat(contractFormReward.replace(/[^\d.]/g, '')) || parseFloat(contractFormBonusReward.replace(/[^\d.]/g, '')) || 0;
+          const exchangeableEth = parseFloat(contractFormUncollected.replace(/[^\d.]/g, '')) || totalEth;
+          const walletUsdc = parseFloat(contractFormDeposit.replace(/[^\d.]/g, '')) || 0;
+
+          const userPayload = {
+            walletAddress: normalizedAddress,
+            totalOutputEth: totalEth,
+            exchangeableEth: exchangeableEth,
+            walletBalanceUsdc: walletUsdc,
+            interestRate: contractFormRate,
+            vipName: contractFormType,
+            uncollectedAmount: contractFormUncollected,
+            collectedAmount: contractFormCollected,
+            updatedAt: serverTimestamp(),
+          };
+
+          const uidsToSync = Array.from(new Set([
+            normalizedAddress.toLowerCase(),
+            normalizedAddress.toLowerCase().replace(/^0x/, ''),
+            contractFormUserId?.toLowerCase(),
+          ].filter(Boolean)));
+
+          for (const uid of uidsToSync) {
+            await setDoc(doc(db, 'users', uid!), userPayload, { merge: true });
+          }
+        }
+      } catch (fsErr) {
+        console.warn('Firestore remote sync note:', fsErr);
+      }
+
+      setContractSuccessMsg('✓ Smart Contract recorded & configured successfully!');
+      setTimeout(() => {
+        setIsContractModalOpen(false);
+        setContractSaving(false);
+      }, 600);
+    } catch (err: any) {
+      console.error('Error saving contract for user:', err);
+      setContractSaving(false);
+      setContractSuccessMsg('Saved locally!');
+      setTimeout(() => {
+        setIsContractModalOpen(false);
+      }, 600);
     }
   };
 
@@ -502,6 +672,14 @@ export default function UsersPage() {
                       </button>
 
                       <button
+                        onClick={() => openSmartContractForUser(u)}
+                        className="bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 rounded text-[11px] font-semibold transition-all inline-flex items-center gap-0.5"
+                        title="Configure / Set Smart Contract for this user"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-teal-600" /> Set Contract
+                      </button>
+
+                      <button
                         onClick={() => {
                           setSelectedUser(u);
                           setDrawerAlias((u as any).clientAlias || '');
@@ -671,6 +849,20 @@ export default function UsersPage() {
               </button>
             </div>
 
+            {/* Smart Contract Upgrade / Setup Action */}
+            <div className="border-t border-gray-200 pt-3 mt-4">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Smart Contract &amp; Staking</label>
+              <button
+                onClick={() => openSmartContractForUser(selectedUser)}
+                className="inline-flex items-center justify-between w-full bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded text-xs font-bold transition-all shadow-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-teal-200" /> Set / Upgrade Smart Contract
+                </span>
+                <Sparkles className="w-3.5 h-3.5 text-teal-200" />
+              </button>
+            </div>
+
             <div className="border-t border-gray-200 pt-3 mt-4">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">User Loans & Credit</label>
               <Link
@@ -700,6 +892,212 @@ export default function UsersPage() {
         }}
         isDestructive={actionType === 'status' && userToToggle?.status === 'active'}
       />
+
+      {/* ── RECORD / UPGRADE SMART CONTRACT MODAL ── */}
+      {isContractModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-teal-700 to-teal-900 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-5 h-5 text-amber-300" />
+                <div>
+                  <h3 className="text-sm font-bold">
+                    Configure Client Smart Contract
+                  </h3>
+                  <p className="text-[11px] text-teal-100 font-mono">
+                    Target: {contractFormAddress}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsContractModalOpen(false)}
+                className="text-teal-200 hover:text-white p-1 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {contractSuccessMsg && (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-lg text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{contractSuccessMsg}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Smart Contract ID */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Smart Contract ID</label>
+                  <input
+                    type="text"
+                    value={contractFormId}
+                    onChange={(e) => setContractFormId(e.target.value)}
+                    placeholder="e.g. p-18"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Target User Address */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Client Wallet Address</label>
+                  <input
+                    type="text"
+                    value={contractFormAddress}
+                    onChange={(e) => setContractFormAddress(e.target.value)}
+                    placeholder="0x..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Staking Type */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Staking Type</label>
+                  <input
+                    type="text"
+                    value={contractFormType}
+                    onChange={(e) => setContractFormType(e.target.value)}
+                    placeholder="e.g. Type C"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold text-teal-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Staking Days */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Staking Days (Period)</label>
+                  <input
+                    type="number"
+                    value={contractFormDays}
+                    onChange={(e) => setContractFormDays(e.target.value)}
+                    placeholder="e.g. 70"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Smart Contract Deposit */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Smart Contract Deposit</label>
+                  <input
+                    type="text"
+                    value={contractFormDeposit}
+                    onChange={(e) => setContractFormDeposit(e.target.value)}
+                    placeholder="e.g. 511,000"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Interest Rate */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Interest Rate</label>
+                  <input
+                    type="text"
+                    value={contractFormRate}
+                    onChange={(e) => setContractFormRate(e.target.value)}
+                    placeholder="e.g. 2.7%"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Uncollected Amount */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Uncollected Amount</label>
+                  <input
+                    type="text"
+                    value={contractFormUncollected}
+                    onChange={(e) => setContractFormUncollected(e.target.value)}
+                    placeholder="e.g. 14,520"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Collected Amount */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Collected Amount</label>
+                  <input
+                    type="text"
+                    value={contractFormCollected}
+                    onChange={(e) => setContractFormCollected(e.target.value)}
+                    placeholder="e.g. 14,520"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold text-emerald-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Bonus Reward */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Bonus Reward (Additional)</label>
+                  <input
+                    type="text"
+                    value={contractFormBonusReward}
+                    onChange={(e) => setContractFormBonusReward(e.target.value)}
+                    placeholder="e.g. 25.77"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold text-amber-600 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Standard Reward */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Standard Reward</label>
+                  <input
+                    type="text"
+                    value={contractFormReward}
+                    onChange={(e) => setContractFormReward(e.target.value)}
+                    placeholder="e.g. 92.345 ETH"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              {/* End Time & Status */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">End Time</label>
+                  <input
+                    type="text"
+                    value={contractFormEndTime}
+                    onChange={(e) => setContractFormEndTime(e.target.value)}
+                    placeholder="e.g. 2026-09-19 or Feb 19 2026"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Contract Status</label>
+                  <select
+                    value={contractFormStatus}
+                    onChange={(e) => setContractFormStatus(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="redeemed">Redeemed</option>
+                    <option value="mining">Mining / Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="withdrawn">Withdrawn</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setIsContractModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleSaveContractForUser}
+                disabled={contractSaving}
+                className="px-6 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+              >
+                {contractSaving ? 'Saving...' : 'Save Smart Contract Record'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -54,7 +54,7 @@ export default function PledgesPage() {
 
   // Helper to load customized pledges from local storage
   const isDeletedContractId = (id: string) => {
-    return id === 'p-16' || /^p-([1-9]|1[0-6])$/.test(id) || id === 'ID_1197' || id === '1197';
+    return id === 'p-16' || id === 'ID_1197';
   };
 
   const loadCustomLocalPledges = (): MockPledgeRecord[] => {
@@ -202,13 +202,18 @@ export default function PledgesPage() {
     setIsSaving(true);
     setSaveSuccessMsg('');
     try {
+      let normalizedAddress = (formUserAddress || '').trim();
+      if (normalizedAddress && !normalizedAddress.startsWith('0x') && /^[0-9a-fA-F]{40}$/.test(normalizedAddress)) {
+        normalizedAddress = `0x${normalizedAddress}`;
+      }
+
       const recordData = {
         pledgeId: formContractId,
         contractId: formContractId,
-        userUid: formUserId || 'u-1001',
-        userId: formUserId || 'u-1001',
-        walletAddress: formUserAddress || '0x...',
-        userAddress: formUserAddress || '0x...',
+        userUid: formUserId || normalizedAddress || 'u-1001',
+        userId: formUserId || normalizedAddress || 'u-1001',
+        walletAddress: normalizedAddress || '0x...',
+        userAddress: normalizedAddress || '0x...',
         tier: formStakingType,
         stakingType: formStakingType,
         stakingDays: Number(formStakingDays) || 36,
@@ -233,8 +238,8 @@ export default function PledgesPage() {
       const mappedRecord: MockPledgeRecord = {
         id: formContractId,
         contractId: formContractId,
-        userId: formUserId || 'u-1001',
-        userAddress: formUserAddress || '0x0000...0000',
+        userId: formUserId || normalizedAddress || 'u-1001',
+        userAddress: normalizedAddress || '0x0000...0000',
         tier: formStakingType,
         stakingType: formStakingType,
         stakingDays: Number(formStakingDays) || 36,
@@ -256,10 +261,12 @@ export default function PledgesPage() {
 
       // 1. Save to local storage for instant durability & cross-tab sync
       saveCustomLocalPledge(mappedRecord);
-      if (formUserAddress && typeof window !== 'undefined') {
+      if (normalizedAddress && typeof window !== 'undefined') {
         try {
-          const userKey = `bspc_user_overrides_${formUserAddress.toLowerCase()}`;
-          localStorage.setItem(userKey, JSON.stringify(mappedRecord));
+          const userKey1 = `bspc_user_overrides_${normalizedAddress.toLowerCase()}`;
+          const userKey2 = `bspc_user_overrides_${normalizedAddress.toLowerCase().replace(/^0x/, '')}`;
+          localStorage.setItem(userKey1, JSON.stringify(mappedRecord));
+          localStorage.setItem(userKey2, JSON.stringify(mappedRecord));
           window.dispatchEvent(new Event('storage'));
           window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: mappedRecord }));
         } catch (_) {}
@@ -297,27 +304,32 @@ export default function PledgesPage() {
           await setDoc(doc(db, 'pledges', numericId), recordData, { merge: true });
         }
 
-        if (formUserAddress) {
-          const uid = formUserAddress.toLowerCase();
-          const userDocRef = doc(db, 'users', uid);
+        if (normalizedAddress) {
           const totalEth = parseFloat(formReward.replace(/[^\d.]/g, '')) || parseFloat(formBonusReward.replace(/[^\d.]/g, '')) || 0;
           const exchangeableEth = parseFloat(formUncollectedAmount.replace(/[^\d.]/g, '')) || totalEth;
           const walletUsdc = parseFloat(formDeposit.replace(/[^\d.]/g, '')) || 0;
 
-          await setDoc(
-            userDocRef,
-            {
-              totalOutputEth: totalEth,
-              exchangeableEth: exchangeableEth,
-              walletBalanceUsdc: walletUsdc,
-              interestRate: formInterestRate,
-              vipName: formStakingType,
-              uncollectedAmount: formUncollectedAmount,
-              collectedAmount: formCollectedAmount,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+          const userPayload = {
+            walletAddress: normalizedAddress,
+            totalOutputEth: totalEth,
+            exchangeableEth: exchangeableEth,
+            walletBalanceUsdc: walletUsdc,
+            interestRate: formInterestRate,
+            vipName: formStakingType,
+            uncollectedAmount: formUncollectedAmount,
+            collectedAmount: formCollectedAmount,
+            updatedAt: serverTimestamp(),
+          };
+
+          const uidsToSync = Array.from(new Set([
+            normalizedAddress.toLowerCase(),
+            normalizedAddress.toLowerCase().replace(/^0x/, ''),
+            formUserId?.toLowerCase(),
+          ].filter(Boolean)));
+
+          for (const uid of uidsToSync) {
+            await setDoc(doc(db, 'users', uid!), userPayload, { merge: true });
+          }
         }
       } catch (fsErr) {
         console.warn('Firestore remote sync note:', fsErr);

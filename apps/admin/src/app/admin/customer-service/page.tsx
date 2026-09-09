@@ -25,6 +25,19 @@ interface MockConversation {
 
 const mockConversationsData: MockConversation[] = [
   {
+    conversationId: 'C9tN8j7LjQWfYNtX3Fd',
+    guestLabel: 'Argalw Addis (0x16db...4765)',
+    clientAlias: 'Argalw Addis',
+    walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+    customNote: 'VIP Type C Staker (511,000 USDT Deposit)',
+    source: 'receive_voucher',
+    status: 'active',
+    assignedAgent: 'Support Agent Alpha',
+    lastMessage: 'I am an existing customer and i have an us...',
+    lastMessageTime: '07:32 AM',
+    userUnread: 0,
+  },
+  {
     conversationId: 'conv-8921',
     guestLabel: 'User_4765 (0x16db...4765)',
     clientAlias: 'Argalw Addis',

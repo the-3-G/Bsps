@@ -111,8 +111,24 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
   },
 ];
 
-// Fallback Smart Contract Records – p-17 is the only active contract
+// Fallback Smart Contract Records
 const DEFAULT_CLIENT_CONTRACT_RECORDS = [
+  {
+    id: 'p-18',
+    contractId: 'p-18',
+    walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+    userId: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
+    type: 'Type C',
+    period: '70 days',
+    interestRate: '2.7%',
+    deposit: '511,000',
+    collectionAmount: '14,520',
+    uncollectedAmount: '14,520',
+    reward: '92.345 ETH',
+    additionalReward: '25.77',
+    endTime: '2026-09-19',
+    status: 'redeemed',
+  },
   {
     id: 'p-17',
     contractId: 'p-17',
@@ -131,7 +147,7 @@ const DEFAULT_CLIENT_CONTRACT_RECORDS = [
 ];
 
 const isDeletedContractId = (id: string) => {
-  return id === 'p-16' || /^p-([1-9]|1[0-6])$/.test(id) || id === 'ID_1197' || id === '1197';
+  return id === 'p-16' || id === 'ID_1197';
 };
 
 function formatContractTitle(contractId?: string): string {
@@ -357,15 +373,20 @@ export default function PledgesPage() {
 
     if (address) {
       const userAddr = address.toLowerCase();
+      const rawUserAddr = userAddr.replace(/^0x/, '');
       const matched = allContractRecords.filter((r) => {
         const rAddr = (r.walletAddress || '').toLowerCase();
+        const rawRAddr = rAddr.replace(/^0x/, '');
         const rUid = (r.userId || '').toLowerCase();
+        const rawRUid = rUid.replace(/^0x/, '');
         return (
           rAddr === userAddr ||
+          rawRAddr === rawUserAddr ||
           rAddr.includes(userAddr) ||
+          rawRAddr.includes(rawUserAddr) ||
           userAddr.includes(rAddr) ||
           rUid === userAddr ||
-          rUid.includes(userAddr)
+          rawRUid === rawUserAddr
         );
       });
       if (matched.length > 0) {
