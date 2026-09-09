@@ -114,6 +114,22 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
 // Fallback Smart Contract Records
 const DEFAULT_CLIENT_CONTRACT_RECORDS = [
   {
+    id: 'p-19',
+    contractId: 'p-19',
+    walletAddress: '0x6a8185cd5e524055ea4df59ef29f112133f9db71',
+    userId: '6a8185cd5e524055ea4df59ef29f112133f9db71',
+    type: 'Type C',
+    period: '70 days',
+    interestRate: '2.7%',
+    deposit: '511,000',
+    collectionAmount: '496,480',
+    uncollectedAmount: '14,520',
+    reward: '92.345 ETH',
+    additionalReward: '25.77',
+    endTime: '2026-02-19',
+    status: 'redeemed',
+  },
+  {
     id: 'p-17',
     contractId: 'p-17',
     walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',

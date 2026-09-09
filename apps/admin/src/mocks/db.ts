@@ -169,6 +169,24 @@ function generateTxHash(index: number): string {
 
 export const mockUsers: MockUser[] = [
   {
+    id: '6a8185cd5e524055ea4df59ef29f112133f9db71',
+    walletAddress: '0x6a8185cd5e524055ea4df59ef29f112133f9db71',
+    username: 'User_DB71',
+    handle: '@User_DB71',
+    inviteCode: 'INV-DB71',
+    email: 'user_db71@bspc.io',
+    role: 'user',
+    balanceUsdt: '511000',
+    balanceEth: '25.7700',
+    onChainVerifiedUsdc: '511000',
+    withdrawalTotal: '0',
+    collectionTotal: '496480',
+    status: 'active',
+    collectionStatus: 'active',
+    otherAuth: 'email-verified',
+    createdAt: new Date(2026, 6, 11).toISOString(),
+  },
+  {
     id: '0x149534751f4f85af01ce291fd2be194c8950441d',
     walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
     username: 'user_1495',
@@ -189,6 +207,29 @@ export const mockUsers: MockUser[] = [
 ];
 
 export const mockPledges: MockPledgeRecord[] = [
+  {
+    id: 'p-19',
+    contractId: 'p-19',
+    userId: '6a8185cd5e524055ea4df59ef29f112133f9db71',
+    userAddress: '0x6a8185cd5e524055ea4df59ef29f112133f9db71',
+    tier: 'Type C',
+    stakingType: 'Type C',
+    stakingDays: 70,
+    deposit: '511,000',
+    amountThreshold: '511,000',
+    miningRatio: '2.7%',
+    interestRate: '2.7%',
+    miningReward: '92.345 ETH',
+    collectionAmount: '496,480',
+    uncollectedAmount: '14,520',
+    topUpAmount: '0',
+    ethReward: '25.77',
+    bonusReward: '25.77',
+    participationTime: new Date(2026, 6, 11).toISOString(),
+    endTime: '2026-02-19',
+    status: 'redeemed',
+    txHash: '0x6a8185cd5e524055ea4df59ef29f112133f9db71000000000000000000000001',
+  },
   {
     id: 'p-17',
     contractId: 'p-17',

@@ -118,20 +118,20 @@ export function ThreadClient() {
         });
         if (uList.length === 0) {
           uList.push(
-            { uid: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', username: 'Argalw Addis (0x16db...4765)' },
+            { uid: '6a8185cd5e524055ea4df59ef29f112133f9db71', walletAddress: '0x6a8185cd5e524055ea4df59ef29f112133f9db71', username: 'User_DB71 (0x6a81...db71)' },
             { uid: '0x149534751f4f85Af01ce291FD2be194c8950441d', walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d', username: 'User_441D (0x1495...441d)' }
           );
         }
         setRegisteredUsers(uList);
       }).catch(() => {
         setRegisteredUsers([
-          { uid: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', username: 'Argalw Addis (0x16db...4765)' },
+          { uid: '6a8185cd5e524055ea4df59ef29f112133f9db71', walletAddress: '0x6a8185cd5e524055ea4df59ef29f112133f9db71', username: 'User_DB71 (0x6a81...db71)' },
           { uid: '0x149534751f4f85Af01ce291FD2be194c8950441d', walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d', username: 'User_441D (0x1495...441d)' }
         ]);
       });
     } catch (_) {
       setRegisteredUsers([
-        { uid: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765', username: 'Argalw Addis (0x16db...4765)' },
+        { uid: '6a8185cd5e524055ea4df59ef29f112133f9db71', walletAddress: '0x6a8185cd5e524055ea4df59ef29f112133f9db71', username: 'User_DB71 (0x6a81...db71)' },
         { uid: '0x149534751f4f85Af01ce291FD2be194c8950441d', walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d', username: 'User_441D (0x1495...441d)' }
       ]);
     }
