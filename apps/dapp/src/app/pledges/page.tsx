@@ -123,7 +123,7 @@ const DEFAULT_CLIENT_CONTRACT_RECORDS = [
     deposit: '57980',
     collectionAmount: '51628.71954',
     uncollectedAmount: '6389.6586',
-    reward: '6.474860079 ETH',
+    reward: '6.499860079 ETH',
     additionalReward: '3.1',
     endTime: 'June 22 Monday',
     status: 'mining',
@@ -188,6 +188,10 @@ export default function PledgesPage() {
 
   // Sync with Firestore config and real-time Pledges + Local Storage Overrides
   useEffect(() => {
+    let unsubTiers = () => {};
+    let unsubPledges = () => {};
+    let unsubDocP17 = () => {};
+
     const syncLocal = () => {
       const customPledges = loadLocalCustomPledges();
       if (customPledges.length > 0) {
@@ -207,88 +211,142 @@ export default function PledgesPage() {
     window.addEventListener('storage', syncLocal);
     window.addEventListener('bspc_pledges_updated', syncLocal);
 
-    try {
-      const db = getFirebaseFirestore();
-      
-      // 1. VIP Tiers Sync
-      const docRef = doc(db, 'config', 'vipTiers');
-      const unsubTiers = onSnapshot(docRef, (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          if (Array.isArray(data.tiers) && data.tiers.length > 0) {
-            const merged = data.tiers.map((t: any, idx: number) => {
-              const fallback = DEFAULT_VIP_TIERS[idx] || DEFAULT_VIP_TIERS[0];
-              return {
-                ...fallback,
-                ...t,
-                vip: t.vip ?? fallback.vip,
-                name: t.name ?? fallback.name,
-                participants: Number(t.participants ?? fallback.participants),
-                totalAmount: Number(t.totalAmount ?? fallback.totalAmount),
-                interestRate: t.interestRate ?? fallback.interestRate,
-                amountRange: t.amountRange ?? fallback.amountRange,
-                amountMin: Number(t.amountMin ?? fallback.amountMin),
-                amountMax: Number(t.amountMax ?? fallback.amountMax),
-              };
-            });
-            setVipTiers(merged);
-          }
+    const initSync = async () => {
+      try {
+        const { getFirebaseAuth } = await import('@bspc/firebase');
+        const { signInAnonymously } = await import('firebase/auth');
+        const auth = getFirebaseAuth();
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (_) {}
         }
-      });
 
-      // 2. Real-time Smart Contract Records Sync
-      const pledgesColRef = collection(db, 'pledges');
-      const unsubPledges = onSnapshot(pledgesColRef, (snap) => {
-        const customLocal = loadLocalCustomPledges();
-        const map = new Map<string, any>();
-
-        // Default base
-        DEFAULT_CLIENT_CONTRACT_RECORDS.forEach((r) => map.set(r.id, r));
-
-        // Firestore fetched
-        if (!snap.empty) {
-          snap.docs
-            .filter((d) => !isDeletedContractId(d.id))
-            .forEach((d) => {
-              const data = d.data();
-              map.set(d.id, {
-                id: d.id,
-                contractId: data.contractId || d.id,
-                walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
-                userId: (data.userUid || data.userId || '').toLowerCase(),
-                type: data.stakingType || data.tier || 'Tier A',
-                period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
-                interestRate: data.interestRate || data.miningRatio || '1.5%',
-                deposit: data.deposit || data.amountThreshold || '57980',
-                collectionAmount: data.collectedAmount || data.collectionAmount || '51628.71954',
-                uncollectedAmount: data.uncollectedAmount || '6389.6586',
-                reward: data.reward || data.miningReward || '6.474860079 ETH',
-                additionalReward: data.bonusReward || data.ethReward || '3.1',
-                endTime: data.endTime || 'June 22 Monday',
-                status: data.status || 'mining',
-                createdAt: data.createdAt || '',
-                updatedAt: data.updatedAt || '',
+        const db = getFirebaseFirestore();
+        
+        // 1. VIP Tiers Sync
+        const docRef = doc(db, 'config', 'vipTiers');
+        unsubTiers = onSnapshot(docRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.tiers) && data.tiers.length > 0) {
+              const merged = data.tiers.map((t: any, idx: number) => {
+                const fallback = DEFAULT_VIP_TIERS[idx] || DEFAULT_VIP_TIERS[0];
+                return {
+                  ...fallback,
+                  ...t,
+                  vip: t.vip ?? fallback.vip,
+                  name: t.name ?? fallback.name,
+                  participants: Number(t.participants ?? fallback.participants),
+                  totalAmount: Number(t.totalAmount ?? fallback.totalAmount),
+                  interestRate: t.interestRate ?? fallback.interestRate,
+                  amountRange: t.amountRange ?? fallback.amountRange,
+                  amountMin: Number(t.amountMin ?? fallback.amountMin),
+                  amountMax: Number(t.amountMax ?? fallback.amountMax),
+                };
               });
+              setVipTiers(merged);
+            }
+          }
+        }, (err) => {
+          console.warn('VIP tiers snapshot notice:', err);
+        });
+
+        // 2. Real-time Smart Contract Records Sync (Collection)
+        const pledgesColRef = collection(db, 'pledges');
+        unsubPledges = onSnapshot(pledgesColRef, (snap) => {
+          const customLocal = loadLocalCustomPledges();
+          const map = new Map<string, any>();
+
+          // Default base
+          DEFAULT_CLIENT_CONTRACT_RECORDS.forEach((r) => map.set(r.id, r));
+
+          // Firestore fetched
+          if (!snap.empty) {
+            snap.docs
+              .filter((d) => !isDeletedContractId(d.id))
+              .forEach((d) => {
+                const data = d.data();
+                map.set(d.id, {
+                  id: d.id,
+                  contractId: data.contractId || d.id,
+                  walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
+                  userId: (data.userUid || data.userId || '').toLowerCase(),
+                  type: data.stakingType || data.tier || 'Tier A',
+                  period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
+                  interestRate: data.interestRate || data.miningRatio || '1.5%',
+                  deposit: data.deposit || data.amountThreshold || '57980',
+                  collectionAmount: data.collectedAmount || data.collectionAmount || '51628.71954',
+                  uncollectedAmount: data.uncollectedAmount || '6389.6586',
+                  reward: data.reward || data.miningReward || data.standardReward || '6.499860079 ETH',
+                  additionalReward: data.bonusReward || data.ethReward || '3.1',
+                  endTime: data.endTime || 'June 22 Monday',
+                  status: data.status || 'mining',
+                  createdAt: data.createdAt || '',
+                  updatedAt: data.updatedAt || '',
+                });
+              });
+          }
+
+          // Custom local overrides (highest priority)
+          customLocal.forEach((r: any) => map.set(r.id, r));
+
+          setAllContractRecords(Array.from(map.values()));
+        }, (err) => {
+          console.warn('Pledges collection snapshot notice:', err);
+        });
+
+        // 3. Dedicated direct document listener for p-17
+        const p17Ref = doc(db, 'pledges', 'p-17');
+        unsubDocP17 = onSnapshot(p17Ref, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            const record = {
+              id: snap.id,
+              contractId: data.contractId || snap.id,
+              walletAddress: (data.walletAddress || data.userAddress || '').toLowerCase(),
+              userId: (data.userUid || data.userId || '').toLowerCase(),
+              type: data.stakingType || data.tier || 'Tier A',
+              period: data.stakingDays ? (String(data.stakingDays).includes('day') ? String(data.stakingDays) : `${data.stakingDays} days`) : '36 days',
+              interestRate: data.interestRate || data.miningRatio || '1.5%',
+              deposit: data.deposit || data.amountThreshold || '57980',
+              collectionAmount: data.collectedAmount || data.collectionAmount || '51628.71954',
+              uncollectedAmount: data.uncollectedAmount || '6389.6586',
+              reward: data.reward || data.miningReward || data.standardReward || '6.499860079 ETH',
+              additionalReward: data.bonusReward || data.ethReward || '3.1',
+              endTime: data.endTime || 'June 22 Monday',
+              status: data.status || 'mining',
+              createdAt: data.createdAt || '',
+              updatedAt: data.updatedAt || '',
+            };
+            setAllContractRecords((prev) => {
+              const idx = prev.findIndex((p) => p.id === 'p-17' || p.contractId === 'p-17');
+              if (idx !== -1) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...record };
+                return next;
+              }
+              return [record, ...prev];
             });
-        }
+          }
+        }, (err) => {
+          console.warn('Direct p-17 doc snapshot notice:', err);
+        });
 
-        // Custom local overrides (highest priority)
-        customLocal.forEach((r: any) => map.set(r.id, r));
+      } catch (e) {
+        console.warn('Firestore sync warning:', e);
+      }
+    };
 
-        setAllContractRecords(Array.from(map.values()));
-      });
+    initSync();
 
-      return () => {
-        window.removeEventListener('storage', syncLocal);
-        window.removeEventListener('bspc_pledges_updated', syncLocal);
-        unsubTiers();
-        unsubPledges();
-      };
-    } catch (e) {
-      console.warn('Firestore sync warning:', e);
+    return () => {
       window.removeEventListener('storage', syncLocal);
       window.removeEventListener('bspc_pledges_updated', syncLocal);
-    }
+      unsubTiers();
+      unsubPledges();
+      unsubDocP17();
+    };
   }, []);
 
   // Filter contract records for the connected user or fallback

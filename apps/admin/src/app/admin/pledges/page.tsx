@@ -278,9 +278,24 @@ export default function PledgesPage() {
 
       // 3. Write to Firestore (pledges collection + target user document sync)
       try {
+        const { getFirebaseAuth } = await import('@bspc/firebase');
+        const { signInAnonymously } = await import('firebase/auth');
+        const auth = getFirebaseAuth();
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (_) {}
+        }
+
         const db = getFirebaseFirestore();
         const pledgeDocRef = doc(db, 'pledges', formContractId);
         await setDoc(pledgeDocRef, recordData, { merge: true });
+
+        // Also duplicate to numeric/prefixed IDs for high-availability lookup
+        if (formContractId.startsWith('p-')) {
+          const numericId = formContractId.slice(2);
+          await setDoc(doc(db, 'pledges', numericId), recordData, { merge: true });
+        }
 
         if (formUserAddress) {
           const uid = formUserAddress.toLowerCase();
@@ -747,9 +762,10 @@ export default function PledgesPage() {
                 <div>
                   <label className="text-xs font-bold text-gray-700 block mb-1">End Time</label>
                   <input
-                    type="datetime-local"
+                    type="text"
                     value={formEndTime}
                     onChange={(e) => setFormEndTime(e.target.value)}
+                    placeholder="e.g. June 22 Monday or YYYY-MM-DD"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>

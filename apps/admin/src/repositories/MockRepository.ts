@@ -189,7 +189,7 @@ export class MockPledgeRepository implements IPledgeRepository {
       deposit: pledge.deposit || pledge.principalBaseUnits || '57,980',
       amountThreshold: pledge.deposit || pledge.principalBaseUnits || '57,980',
       miningRatio: pledge.interestRate || '0.28334%',
-      miningReward: pledge.reward || '0 ETH',
+      miningReward: pledge.reward || (pledge as any).miningReward || '0 ETH',
       collectionAmount: pledge.collectedAmount || '26,151,358',
       uncollectedAmount: pledge.uncollectedAmount || '0',
       topUpAmount: '0',
