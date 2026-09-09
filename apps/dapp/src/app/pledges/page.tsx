@@ -147,15 +147,15 @@ const DEFAULT_CLIENT_CONTRACT_RECORDS = [
 ];
 
 const loadDeletedIds = (): string[] => {
-  if (typeof window === 'undefined') return ['p-16', 'ID_1197', 'p-2', '2', 'p-18', '18'];
+  if (typeof window === 'undefined') return [];
   try {
     const stored = localStorage.getItem('bspc_deleted_contract_ids');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) return Array.from(new Set([...parsed, 'p-16', 'ID_1197', 'p-2', '2', 'p-18', '18']));
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (_) {}
-  return ['p-16', 'ID_1197', 'p-2', '2', 'p-18', '18'];
+  return [];
 };
 
 const isDeletedContractId = (id: string, extraDeleted: string[] = []) => {
@@ -166,13 +166,7 @@ const isDeletedContractId = (id: string, extraDeleted: string[] = []) => {
   return (
     deleted.includes(cleanId) ||
     deleted.includes(`p-${numeric}`) ||
-    deleted.includes(numeric) ||
-    cleanId === 'p-16' ||
-    cleanId === 'ID_1197' ||
-    cleanId === 'p-2' ||
-    cleanId === '2' ||
-    cleanId === 'p-18' ||
-    cleanId === '18'
+    deleted.includes(numeric)
   );
 };
 

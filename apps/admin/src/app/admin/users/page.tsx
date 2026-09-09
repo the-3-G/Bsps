@@ -239,12 +239,20 @@ export default function UsersPage() {
         }
 
         const db = getFirebaseFirestore();
-        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+        const { doc, setDoc, serverTimestamp, arrayRemove } = await import('firebase/firestore');
+        const numericId = contractFormId.replace(/^p-/, '');
+        const idsToRestore = Array.from(new Set([contractFormId, `p-${numericId}`, numericId]));
+
         const pledgeDocRef = doc(db, 'pledges', contractFormId);
         await setDoc(pledgeDocRef, recordData, { merge: true });
 
+        // Unblock from global deletedContracts
+        await setDoc(doc(db, 'config', 'deletedContracts'), {
+          ids: arrayRemove(...idsToRestore),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
         if (contractFormId.startsWith('p-')) {
-          const numericId = contractFormId.slice(2);
           await setDoc(doc(db, 'pledges', numericId), recordData, { merge: true });
         }
 
@@ -307,7 +315,7 @@ export default function UsersPage() {
       // 1. Record in persistent deleted IDs
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('bspc_deleted_contract_ids');
-        const current = stored ? JSON.parse(stored) : ['p-16', 'ID_1197', 'p-2', '2'];
+        const current = stored ? JSON.parse(stored) : [];
         const updated = Array.from(new Set([...current, ...idsToDelete]));
         localStorage.setItem('bspc_deleted_contract_ids', JSON.stringify(updated));
 

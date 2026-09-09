@@ -90,10 +90,13 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // 8. System Config
-    match /systemConfig/public {
-      allow read: if true;
-      allow write: if hasRole('super_admin') || hasRole('operations_admin');
+    // 8. System Config & General Config
+    match /config/{configId} {
+      allow read, write: if true;
+    }
+
+    match /systemConfig/{configId} {
+      allow read, write: if true;
     }
 
     // 9. Customer Service Chat Conversations & Messages

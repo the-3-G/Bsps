@@ -21,7 +21,7 @@ import { mockPledges, MockPledgeRecord } from '../../../mocks/db';
 import { pledgeRepository, userRepository } from '../../../repositories';
 import { Plus, Edit3, X, Check, Sparkles, Trash2 } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 export default function PledgesPage() {
   const [pledgesList, setPledgesList] = useState<MockPledgeRecord[]>([]);
@@ -38,7 +38,7 @@ export default function PledgesPage() {
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
   // Form Fields matching Client request
-  const [formContractId, setFormContractId] = useState('1197');
+  const [formContractId, setFormContractId] = useState('p-1');
   const [formUserAddress, setFormUserAddress] = useState('');
   const [formUserId, setFormUserId] = useState('');
   const [formStakingType, setFormStakingType] = useState('VIP1');
@@ -54,7 +54,7 @@ export default function PledgesPage() {
 
   // Helper to load deleted contract IDs from localStorage
   const loadDeletedIds = (): string[] => {
-    if (typeof window === 'undefined') return ['p-16', 'ID_1197', 'p-2', '2'];
+    if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem('bspc_deleted_contract_ids');
       if (stored) {
@@ -62,15 +62,15 @@ export default function PledgesPage() {
         if (Array.isArray(parsed)) return parsed;
       }
     } catch (_) {}
-    return ['p-16', 'ID_1197', 'p-2', '2'];
+    return [];
   };
 
-  const isDeletedContractId = (id: string) => {
+  const isDeletedContractId = (id: string, remoteDeleted: string[] = []) => {
     if (!id) return false;
-    const deleted = loadDeletedIds();
+    const deleted = Array.from(new Set([...loadDeletedIds(), ...remoteDeleted]));
     const cleanId = id.trim();
     const numeric = cleanId.replace(/^p-/, '');
-    return deleted.includes(cleanId) || deleted.includes(`p-${numeric}`) || deleted.includes(numeric) || cleanId === 'p-16' || cleanId === 'ID_1197';
+    return deleted.includes(cleanId) || deleted.includes(`p-${numeric}`) || deleted.includes(numeric);
   };
 
   const loadCustomLocalPledges = (): MockPledgeRecord[] => {
@@ -350,7 +350,24 @@ export default function PledgesPage() {
         txHash: recordData.txHash,
       };
 
-      // 1. Save to local storage for instant durability & cross-tab sync
+      const numericId = formContractId.replace(/^p-/, '');
+      const idsToRestore = Array.from(new Set([formContractId, `p-${numericId}`, numericId]));
+
+      // 1. Remove from local deleted IDs list
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('bspc_deleted_contract_ids');
+          if (stored) {
+            const current = JSON.parse(stored);
+            if (Array.isArray(current)) {
+              const filtered = current.filter((id: string) => !idsToRestore.includes(id));
+              localStorage.setItem('bspc_deleted_contract_ids', JSON.stringify(filtered));
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Save to local storage for instant durability & cross-tab sync
       saveCustomLocalPledge(mappedRecord);
       if (normalizedAddress && typeof window !== 'undefined') {
         try {
@@ -363,7 +380,7 @@ export default function PledgesPage() {
         } catch (_) {}
       }
 
-      // 2. Immediate optimistic state update
+      // 3. Immediate optimistic state update
       setPledgesList((prev) => {
         const idx = prev.findIndex((p) => p.id === formContractId || p.contractId === formContractId);
         if (idx !== -1) {
@@ -374,7 +391,7 @@ export default function PledgesPage() {
         return [mappedRecord, ...prev];
       });
 
-      // 3. Write to Firestore (pledges collection + target user document sync)
+      // 4. Write to Firestore (pledges collection + target user document sync + unblock deletedContracts)
       try {
         const { getFirebaseAuth } = await import('@bspc/firebase');
         const { signInAnonymously } = await import('firebase/auth');
@@ -389,10 +406,16 @@ export default function PledgesPage() {
         const pledgeDocRef = doc(db, 'pledges', formContractId);
         await setDoc(pledgeDocRef, recordData, { merge: true });
 
+        // Also unblock in global deletedContracts
+        await setDoc(doc(db, 'config', 'deletedContracts'), {
+          ids: arrayRemove(...idsToRestore),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
         // Also duplicate to numeric/prefixed IDs for high-availability lookup
         if (formContractId.startsWith('p-')) {
-          const numericId = formContractId.slice(2);
-          await setDoc(doc(db, 'pledges', numericId), recordData, { merge: true });
+          const nId = formContractId.slice(2);
+          await setDoc(doc(db, 'pledges', nId), recordData, { merge: true });
         }
 
         if (normalizedAddress) {
