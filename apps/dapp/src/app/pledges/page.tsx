@@ -146,8 +146,24 @@ const DEFAULT_CLIENT_CONTRACT_RECORDS = [
   },
 ];
 
+const loadDeletedIds = (): string[] => {
+  if (typeof window === 'undefined') return ['p-16', 'ID_1197', 'p-2', '2'];
+  try {
+    const stored = localStorage.getItem('bspc_deleted_contract_ids');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (_) {}
+  return ['p-16', 'ID_1197', 'p-2', '2'];
+};
+
 const isDeletedContractId = (id: string) => {
-  return id === 'p-16' || id === 'ID_1197';
+  if (!id) return false;
+  const deleted = loadDeletedIds();
+  const cleanId = id.trim();
+  const numeric = cleanId.replace(/^p-/, '');
+  return deleted.includes(cleanId) || deleted.includes(`p-${numeric}`) || deleted.includes(numeric) || cleanId === 'p-16' || cleanId === 'ID_1197' || cleanId === 'p-2' || cleanId === '2';
 };
 
 function formatContractTitle(contractId?: string): string {
@@ -368,13 +384,28 @@ export default function PledgesPage() {
   // Filter contract records for the connected user or fallback
   const userContractRecords = useMemo(() => {
     if (!allContractRecords || allContractRecords.length === 0) {
-      return DEFAULT_CLIENT_CONTRACT_RECORDS;
+      return DEFAULT_CLIENT_CONTRACT_RECORDS.filter((r) => !isDeletedContractId(r.id) && !isDeletedContractId(r.contractId));
     }
+
+    // 1. Filter out all deleted contract IDs
+    const validRecords = allContractRecords.filter(
+      (r) => !isDeletedContractId(r.id) && !isDeletedContractId(r.contractId)
+    );
+
+    // 2. Deduplicate by canonical ID (e.g. "p-18" and "18" collapse into single record)
+    const deduplicatedMap = new Map<string, any>();
+    validRecords.forEach((r) => {
+      const cId = String(r.contractId || r.id);
+      const num = cId.replace(/^p-/, '');
+      const key = `p-${num}`;
+      deduplicatedMap.set(key, r);
+    });
+    const uniqueRecords = Array.from(deduplicatedMap.values());
 
     if (address) {
       const userAddr = address.toLowerCase();
       const rawUserAddr = userAddr.replace(/^0x/, '');
-      const matched = allContractRecords.filter((r) => {
+      const matched = uniqueRecords.filter((r) => {
         const rAddr = (r.walletAddress || '').toLowerCase();
         const rawRAddr = rAddr.replace(/^0x/, '');
         const rUid = (r.userId || '').toLowerCase();
@@ -394,7 +425,7 @@ export default function PledgesPage() {
       }
     }
 
-    return allContractRecords;
+    return uniqueRecords;
   }, [allContractRecords, address]);
 
   const handleOpenSmartContract = (tierItem: VipTierItem) => {

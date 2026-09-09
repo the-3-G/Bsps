@@ -19,9 +19,9 @@ import {
 } from '../../../components/ui/DataTable';
 import { mockPledges, MockPledgeRecord } from '../../../mocks/db';
 import { pledgeRepository, userRepository } from '../../../repositories';
-import { Plus, Edit3, X, Check, Sparkles } from 'lucide-react';
+import { Plus, Edit3, X, Check, Sparkles, Trash2 } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 export default function PledgesPage() {
   const [pledgesList, setPledgesList] = useState<MockPledgeRecord[]>([]);
@@ -52,9 +52,25 @@ export default function PledgesPage() {
   const [formEndTime, setFormEndTime] = useState('');
   const [formStatus, setFormStatus] = useState<'mining' | 'completed' | 'withdrawn' | 'redeemed'>('mining');
 
-  // Helper to load customized pledges from local storage
+  // Helper to load deleted contract IDs from localStorage
+  const loadDeletedIds = (): string[] => {
+    if (typeof window === 'undefined') return ['p-16', 'ID_1197', 'p-2', '2'];
+    try {
+      const stored = localStorage.getItem('bspc_deleted_contract_ids');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (_) {}
+    return ['p-16', 'ID_1197', 'p-2', '2'];
+  };
+
   const isDeletedContractId = (id: string) => {
-    return id === 'p-16' || id === 'ID_1197';
+    if (!id) return false;
+    const deleted = loadDeletedIds();
+    const cleanId = id.trim();
+    const numeric = cleanId.replace(/^p-/, '');
+    return deleted.includes(cleanId) || deleted.includes(`p-${numeric}`) || deleted.includes(numeric) || cleanId === 'p-16' || cleanId === 'ID_1197';
   };
 
   const loadCustomLocalPledges = (): MockPledgeRecord[] => {
@@ -91,16 +107,87 @@ export default function PledgesPage() {
     }
   };
 
+  const canonicalKey = (id: string) => {
+    if (!id) return 'p-0';
+    const num = id.replace(/^p-/, '');
+    return `p-${num}`;
+  };
+
   const mergePledgeSources = (firestoreDocs: MockPledgeRecord[] = []): MockPledgeRecord[] => {
     const map = new Map<string, MockPledgeRecord>();
-    // 1. Base mock pledges (p-17)
-    mockPledges.filter((p) => !isDeletedContractId(p.id)).forEach((p) => map.set(p.id, p));
+    // 1. Base mock pledges (p-17, p-18)
+    mockPledges.filter((p) => !isDeletedContractId(p.id) && !isDeletedContractId(p.contractId || '')).forEach((p) => {
+      map.set(canonicalKey(p.contractId || p.id), p);
+    });
     // 2. Custom local storage additions (higher priority)
     const local = loadCustomLocalPledges();
-    local.filter((p) => !isDeletedContractId(p.id)).forEach((p) => map.set(p.id, p));
+    local.filter((p) => !isDeletedContractId(p.id) && !isDeletedContractId(p.contractId || '')).forEach((p) => {
+      map.set(canonicalKey(p.contractId || p.id), p);
+    });
     // 3. Live Firestore documents (highest priority)
-    firestoreDocs.filter((p) => !isDeletedContractId(p.id)).forEach((p) => map.set(p.id, p));
+    firestoreDocs.filter((p) => !isDeletedContractId(p.id) && !isDeletedContractId(p.contractId || '')).forEach((p) => {
+      map.set(canonicalKey(p.contractId || p.id), p);
+    });
     return Array.from(map.values());
+  };
+
+  // Delete Pledge function
+  const handleDeletePledge = async (pledgeId: string, walletAddress?: string) => {
+    if (!window.confirm(`Are you sure you want to delete Smart Contract "${pledgeId}"? This will remove it from the system and the client DApp.`)) {
+      return;
+    }
+
+    try {
+      const numericId = pledgeId.replace(/^p-/, '');
+      const idsToDelete = Array.from(new Set([pledgeId, `p-${numericId}`, numericId]));
+
+      // 1. Record in persistent deleted IDs
+      const currentDeleted = loadDeletedIds();
+      const updatedDeleted = Array.from(new Set([...currentDeleted, ...idsToDelete]));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bspc_deleted_contract_ids', JSON.stringify(updatedDeleted));
+      }
+
+      // 2. Remove from custom localStorage pledges
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('bspc_admin_custom_pledges');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const filtered = parsed.filter((p: any) => !idsToDelete.includes(p.id) && !idsToDelete.includes(p.contractId));
+          localStorage.setItem('bspc_admin_custom_pledges', JSON.stringify(filtered));
+        }
+
+        if (walletAddress) {
+          const cleanAddr = walletAddress.toLowerCase();
+          localStorage.removeItem(`bspc_user_overrides_${cleanAddr}`);
+          localStorage.removeItem(`bspc_user_overrides_${cleanAddr.replace(/^0x/, '')}`);
+        }
+
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: { deletedId: pledgeId } }));
+      }
+
+      // 3. Optimistic local state update
+      setPledgesList((prev) => prev.filter((p) => !idsToDelete.includes(p.id) && !idsToDelete.includes(p.contractId || '')));
+
+      // 4. Delete document from Firestore
+      try {
+        const db = getFirebaseFirestore();
+        for (const id of idsToDelete) {
+          await deleteDoc(doc(db, 'pledges', id));
+        }
+      } catch (fsErr) {
+        console.warn('Firestore delete notice:', fsErr);
+      }
+
+      // 5. Close modal if active
+      if (isModalOpen && editingPledge && (idsToDelete.includes(editingPledge.id) || idsToDelete.includes(editingPledge.contractId || ''))) {
+        setIsModalOpen(false);
+        setEditingPledge(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete pledge:', err);
+    }
   };
 
   useEffect(() => {
@@ -573,12 +660,19 @@ export default function PledgesPage() {
                     </td>
                   )}
                   {visibleColumns.includes('actions') && (
-                    <td className="text-right">
+                    <td className="text-right space-x-1.5 whitespace-nowrap">
                       <button
                         onClick={() => openEditModal(p)}
                         className="bg-teal-50 hover:bg-teal-100 text-teal-700 font-semibold px-2.5 py-1 rounded text-xs transition-all inline-flex items-center gap-1"
                       >
                         <Edit3 className="w-3.5 h-3.5" /> Adjust
+                      </button>
+                      <button
+                        onClick={() => handleDeletePledge(p.contractId || p.id, p.userAddress)}
+                        className="bg-red-50 hover:bg-red-100 text-red-600 font-semibold px-2.5 py-1 rounded text-xs transition-all inline-flex items-center gap-1"
+                        title="Delete Smart Contract"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
                     </td>
                   )}
@@ -799,21 +893,38 @@ export default function PledgesPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between gap-3">
+              <div>
+                {editingPledge && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePledge(editingPledge.contractId || editingPledge.id, editingPledge.userAddress)}
+                    className="px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Contract
+                  </button>
+                )}
+              </div>
 
-              <button
-                onClick={handleSaveSmartContract}
-                disabled={isSaving}
-                className="px-6 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
-              >
-                {isSaving ? 'Saving...' : 'Save Smart Contract Record'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSmartContract}
+                  disabled={isSaving}
+                  className="px-6 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {isSaving ? 'Saving...' : 'Save Smart Contract Record'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
