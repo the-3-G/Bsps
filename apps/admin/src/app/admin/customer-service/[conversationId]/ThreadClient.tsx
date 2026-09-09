@@ -424,7 +424,7 @@ export function ThreadClient() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setReplyText(e.target.value);
     if (!conversationId) return;
 
@@ -675,7 +675,7 @@ export function ThreadClient() {
 
               if (isSystem) {
                 return (
-                  <div key={m.id} className="p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 text-center font-mono">
+                  <div key={m.id} className="p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 text-center font-mono whitespace-pre-wrap break-words">
                     {m.text}
                   </div>
                 );
@@ -685,10 +685,10 @@ export function ThreadClient() {
                 <div key={m.id} className={`flex flex-col ${isAgent ? 'items-end' : 'items-start'}`}>
                   <div className="text-[10px] font-bold text-gray-500 mb-0.5">{m.senderName}</div>
                   <div
-                    className={`max-w-[75%] p-3 rounded-lg text-xs leading-relaxed ${
+                    className={`max-w-[85%] p-3.5 rounded-xl text-xs leading-relaxed whitespace-pre-wrap break-words font-sans shadow-sm ${
                       isAgent
-                        ? 'bg-teal-primary text-white font-medium rounded-tr-none shadow-sm'
-                        : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none shadow-sm'
+                        ? 'bg-teal-primary text-white font-normal rounded-tr-none'
+                        : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none'
                     }`}
                   >
                     {m.text}
@@ -699,24 +699,97 @@ export function ThreadClient() {
             })}
           </div>
 
-          {/* Reply Form */}
-          <form onSubmit={handleSendReply} className="p-3 bg-white border-t border-gray-200 flex gap-2">
-            <input
-              type="text"
-              placeholder="Type official support reply..."
-              value={replyText}
-              onChange={handleInputChange}
-              disabled={convDetails?.status === 'blocked'}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-teal-primary disabled:opacity-40"
-            />
-            <button
-              type="submit"
-              disabled={!replyText.trim() || convDetails?.status === 'blocked'}
-              className="bg-teal-primary hover:bg-teal-hover disabled:opacity-40 text-white font-bold text-xs px-4 py-2 rounded inline-flex items-center gap-1.5 transition-colors"
-            >
-              <Send className="w-3.5 h-3.5" /> Send Reply
-            </button>
-          </form>
+          {/* Quick Response Templates & Reply Form */}
+          <div className="p-3 bg-white border-t border-gray-200 space-y-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+              <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 whitespace-nowrap">
+                <Sparkles className="w-3 h-3 text-amber-500" /> Templates:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyText(
+`Dear User:
+
+Congratulations! Your application for the 218,000 USDC smart contract savings plan is now officially active.
+
+The system has successfully received and deposited your transfer of 15,325 USDC, and the funds have been automatically added to your smart contract plan. You can click "Plan" → "Records" to view your contract details and fund status in real time.
+
+As an incentive for this contract, the blockchain system will reward you with an additional 17.7 ETH, which has been simultaneously distributed to your contract. You can view the details on the contract plan interface.
+
+Currently, your 15,325 USDC is accruing interest at a daily rate of 2.7%. The system will settle and distribute the returns periodically.
+
+Friendly Reminder: Currently, your smart contract plan has completed 15,325 USDC, with a remaining balance of 202,675 USDC. To ensure you maximize your returns and enjoy the full contract interest rate and returns, please replenish the remaining amount as soon as possible. The earlier you replenish, the more total interest you will receive.
+
+Thank you for your trust and cooperation. The blockchain system will continue to provide you with a secure, efficient, and transparent asset growth experience.`
+                  );
+                }}
+                className="px-2 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded font-medium whitespace-nowrap transition-colors"
+              >
+                📜 Smart Contract Plan Active
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyText(
+`Dear User:
+
+Your deposit has been successfully confirmed on the blockchain and credited to your account balance.
+
+Please check your asset overview page to view your updated balance. If you have any further questions, feel free to contact us at any time.`
+                  );
+                }}
+                className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 rounded font-medium whitespace-nowrap transition-colors"
+              >
+                💰 Deposit Confirmed
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyText(
+`Dear User:
+
+Your reward voucher has been successfully granted to your wallet. You can claim and activate it directly from the Plan & Rewards section.
+
+Thank you for choosing BSP Smart Contract platform!`
+                  );
+                }}
+                className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 rounded font-medium whitespace-nowrap transition-colors"
+              >
+                🎁 Voucher Granted
+              </button>
+            </div>
+
+            <form onSubmit={handleSendReply} className="space-y-1.5">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  rows={3}
+                  placeholder="Type official support reply (Press Shift+Enter for new paragraph, Enter to send)..."
+                  value={replyText}
+                  onChange={handleInputChange}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendReply(e);
+                    }
+                  }}
+                  disabled={convDetails?.status === 'blocked'}
+                  className="flex-1 border border-gray-300 rounded-lg p-2.5 text-xs text-gray-800 focus:outline-none focus:border-teal-primary disabled:opacity-40 resize-y font-sans leading-relaxed min-h-[60px] max-h-[180px]"
+                />
+                <button
+                  type="submit"
+                  disabled={!replyText.trim() || convDetails?.status === 'blocked'}
+                  className="bg-teal-primary hover:bg-teal-hover disabled:opacity-40 text-white font-bold text-xs px-4 py-3 rounded-lg inline-flex items-center gap-1.5 transition-colors h-fit self-end shadow-sm"
+                >
+                  <Send className="w-3.5 h-3.5" /> Send
+                </button>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-gray-400 px-1">
+                <span>Enter = Send • Shift + Enter = New Paragraph / Line spacing</span>
+                <span>Multiline paragraphs fully preserved</span>
+              </div>
+            </form>
+          </div>
         </div>
 
         {/* Sidebar Info & Notes (1 col) */}

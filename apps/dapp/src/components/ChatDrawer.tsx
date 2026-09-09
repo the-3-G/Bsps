@@ -264,7 +264,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   }, [conversationId, isOpen]);
 
   // Handle typing indicator
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInputText(e.target.value);
     if (!conversationId) return;
 
@@ -444,9 +444,9 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                 return (
                   <div key={msg.id} className={`flex flex-col ${isGuest ? 'items-end' : 'items-start'}`}>
                     <div
-                      className={`max-w-[82%] p-3 rounded-2xl text-xs leading-relaxed ${
+                      className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words font-sans shadow-md ${
                         isGuest
-                          ? 'bg-amber-500 text-slate-950 font-medium rounded-tr-none shadow-md'
+                          ? 'bg-amber-500 text-slate-950 font-normal rounded-tr-none'
                           : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
                       }`}
                     >
@@ -477,19 +477,25 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         </div>
 
         {/* Input Bar */}
-        <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
-          <input
-            type="text"
-            placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message to support..."}
+        <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2 items-end">
+          <textarea
+            rows={1}
+            placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message (Shift+Enter for new line)..."}
             value={inputText}
             onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e);
+              }
+            }}
             disabled={isCreating || status === 'blocked'}
-            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40"
+            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
           />
           <button
             type="submit"
             disabled={!inputText.trim() || isCreating || status === 'blocked'}
-            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold p-2.5 rounded-xl transition-all"
+            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold p-2.5 rounded-xl transition-all self-end shrink-0"
           >
             <Send className="w-4 h-4" />
           </button>
