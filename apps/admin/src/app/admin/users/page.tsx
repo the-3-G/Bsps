@@ -23,7 +23,7 @@ import { DbUser } from '@bspc/types';
 import Link from 'next/link';
 import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink, Sparkles, Plus, Check, X, Zap, Trash2 } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { collection, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, deleteDoc, doc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 
 
 export default function UsersPage() {
@@ -329,12 +329,16 @@ export default function UsersPage() {
         window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: { deletedId: pledgeId } }));
       }
 
-      // 3. Delete from Firestore
+      // 3. Delete from Firestore and record globally
       try {
         const db = getFirebaseFirestore();
         for (const id of idsToDelete) {
           await deleteDoc(doc(db, 'pledges', id));
         }
+        await setDoc(doc(db, 'config', 'deletedContracts'), {
+          ids: arrayUnion(...idsToDelete),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
       } catch (fsErr) {
         console.warn('Firestore delete notice:', fsErr);
       }

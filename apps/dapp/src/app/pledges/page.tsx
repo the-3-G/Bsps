@@ -114,22 +114,6 @@ const DEFAULT_VIP_TIERS: VipTierItem[] = [
 // Fallback Smart Contract Records
 const DEFAULT_CLIENT_CONTRACT_RECORDS = [
   {
-    id: 'p-18',
-    contractId: 'p-18',
-    walletAddress: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
-    userId: '0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765',
-    type: 'Type C',
-    period: '70 days',
-    interestRate: '2.7%',
-    deposit: '511,000',
-    collectionAmount: '14,520',
-    uncollectedAmount: '14,520',
-    reward: '92.345 ETH',
-    additionalReward: '25.77',
-    endTime: '2026-09-19',
-    status: 'redeemed',
-  },
-  {
     id: 'p-17',
     contractId: 'p-17',
     walletAddress: '0x149534751f4f85Af01ce291FD2be194c8950441d',
@@ -147,23 +131,33 @@ const DEFAULT_CLIENT_CONTRACT_RECORDS = [
 ];
 
 const loadDeletedIds = (): string[] => {
-  if (typeof window === 'undefined') return ['p-16', 'ID_1197', 'p-2', '2'];
+  if (typeof window === 'undefined') return ['p-16', 'ID_1197', 'p-2', '2', 'p-18', '18'];
   try {
     const stored = localStorage.getItem('bspc_deleted_contract_ids');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return Array.from(new Set([...parsed, 'p-16', 'ID_1197', 'p-2', '2', 'p-18', '18']));
     }
   } catch (_) {}
-  return ['p-16', 'ID_1197', 'p-2', '2'];
+  return ['p-16', 'ID_1197', 'p-2', '2', 'p-18', '18'];
 };
 
-const isDeletedContractId = (id: string) => {
+const isDeletedContractId = (id: string, extraDeleted: string[] = []) => {
   if (!id) return false;
-  const deleted = loadDeletedIds();
+  const deleted = Array.from(new Set([...loadDeletedIds(), ...extraDeleted]));
   const cleanId = id.trim();
   const numeric = cleanId.replace(/^p-/, '');
-  return deleted.includes(cleanId) || deleted.includes(`p-${numeric}`) || deleted.includes(numeric) || cleanId === 'p-16' || cleanId === 'ID_1197' || cleanId === 'p-2' || cleanId === '2';
+  return (
+    deleted.includes(cleanId) ||
+    deleted.includes(`p-${numeric}`) ||
+    deleted.includes(numeric) ||
+    cleanId === 'p-16' ||
+    cleanId === 'ID_1197' ||
+    cleanId === 'p-2' ||
+    cleanId === '2' ||
+    cleanId === 'p-18' ||
+    cleanId === '18'
+  );
 };
 
 function formatContractTitle(contractId?: string): string {
@@ -187,6 +181,7 @@ export default function PledgesPage() {
 
   // Client Smart Contract Records State
   const [allContractRecords, setAllContractRecords] = useState<any[]>(DEFAULT_CLIENT_CONTRACT_RECORDS);
+  const [firestoreDeletedIds, setFirestoreDeletedIds] = useState<string[]>([]);
   const [redeemToast, setRedeemToast] = useState<string | null>(null);
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
 
@@ -197,6 +192,7 @@ export default function PledgesPage() {
       const stored = localStorage.getItem('bspc_admin_custom_pledges');
       if (!stored) return [];
       const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return [];
       return parsed.map((p: any) => ({
         id: p.id || p.contractId,
         contractId: p.contractId || p.id,
@@ -223,6 +219,7 @@ export default function PledgesPage() {
     let unsubTiers = () => {};
     let unsubPledges = () => {};
     let unsubDocP17 = () => {};
+    let unsubDeleted = () => {};
 
     const syncLocal = () => {
       const customPledges = loadLocalCustomPledges();
@@ -256,6 +253,17 @@ export default function PledgesPage() {
 
         const db = getFirebaseFirestore();
         
+        // 0. Deleted Contracts Global Sync
+        const deletedRef = doc(db, 'config', 'deletedContracts');
+        unsubDeleted = onSnapshot(deletedRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.ids)) {
+              setFirestoreDeletedIds(data.ids);
+            }
+          }
+        }, () => {});
+
         // 1. VIP Tiers Sync
         const docRef = doc(db, 'config', 'vipTiers');
         unsubTiers = onSnapshot(docRef, (snap) => {
@@ -291,12 +299,14 @@ export default function PledgesPage() {
           const map = new Map<string, any>();
 
           // Default base
-          DEFAULT_CLIENT_CONTRACT_RECORDS.forEach((r) => map.set(r.id, r));
+          DEFAULT_CLIENT_CONTRACT_RECORDS
+            .filter((r) => !isDeletedContractId(r.id, firestoreDeletedIds))
+            .forEach((r) => map.set(r.id, r));
 
           // Firestore fetched
           if (!snap.empty) {
             snap.docs
-              .filter((d) => !isDeletedContractId(d.id))
+              .filter((d) => !isDeletedContractId(d.id, firestoreDeletedIds))
               .forEach((d) => {
                 const data = d.data();
                 map.set(d.id, {
@@ -321,7 +331,9 @@ export default function PledgesPage() {
           }
 
           // Custom local overrides (highest priority)
-          customLocal.forEach((r: any) => map.set(r.id, r));
+          customLocal
+            .filter((r: any) => !isDeletedContractId(r.id, firestoreDeletedIds))
+            .forEach((r: any) => map.set(r.id, r));
 
           setAllContractRecords(Array.from(map.values()));
         }, (err) => {
@@ -378,18 +390,19 @@ export default function PledgesPage() {
       unsubTiers();
       unsubPledges();
       unsubDocP17();
+      unsubDeleted();
     };
   }, []);
 
   // Filter contract records for the connected user or fallback
   const userContractRecords = useMemo(() => {
     if (!allContractRecords || allContractRecords.length === 0) {
-      return DEFAULT_CLIENT_CONTRACT_RECORDS.filter((r) => !isDeletedContractId(r.id) && !isDeletedContractId(r.contractId));
+      return DEFAULT_CLIENT_CONTRACT_RECORDS.filter((r) => !isDeletedContractId(r.id, firestoreDeletedIds) && !isDeletedContractId(r.contractId, firestoreDeletedIds));
     }
 
     // 1. Filter out all deleted contract IDs
     const validRecords = allContractRecords.filter(
-      (r) => !isDeletedContractId(r.id) && !isDeletedContractId(r.contractId)
+      (r) => !isDeletedContractId(r.id, firestoreDeletedIds) && !isDeletedContractId(r.contractId, firestoreDeletedIds)
     );
 
     // 2. Deduplicate by canonical ID (e.g. "p-18" and "18" collapse into single record)
@@ -420,13 +433,11 @@ export default function PledgesPage() {
           rawRUid === rawUserAddr
         );
       });
-      if (matched.length > 0) {
-        return matched;
-      }
+      return matched;
     }
 
     return uniqueRecords;
-  }, [allContractRecords, address]);
+  }, [allContractRecords, address, firestoreDeletedIds]);
 
   const handleOpenSmartContract = (tierItem: VipTierItem) => {
     setSelectedTier(tierItem);

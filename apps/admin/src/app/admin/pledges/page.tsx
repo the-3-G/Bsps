@@ -21,7 +21,7 @@ import { mockPledges, MockPledgeRecord } from '../../../mocks/db';
 import { pledgeRepository, userRepository } from '../../../repositories';
 import { Plus, Edit3, X, Check, Sparkles, Trash2 } from 'lucide-react';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, arrayUnion } from 'firebase/firestore';
 
 export default function PledgesPage() {
   const [pledgesList, setPledgesList] = useState<MockPledgeRecord[]>([]);
@@ -170,12 +170,16 @@ export default function PledgesPage() {
       // 3. Optimistic local state update
       setPledgesList((prev) => prev.filter((p) => !idsToDelete.includes(p.id) && !idsToDelete.includes(p.contractId || '')));
 
-      // 4. Delete document from Firestore
+      // 4. Delete document from Firestore and record globally
       try {
         const db = getFirebaseFirestore();
         for (const id of idsToDelete) {
           await deleteDoc(doc(db, 'pledges', id));
         }
+        await setDoc(doc(db, 'config', 'deletedContracts'), {
+          ids: arrayUnion(...idsToDelete),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
       } catch (fsErr) {
         console.warn('Firestore delete notice:', fsErr);
       }
