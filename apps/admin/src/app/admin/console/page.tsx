@@ -15,6 +15,8 @@ export default function ConsolePage() {
   const [suspendedUsers, setSuspendedUsers] = useState<number>(0);
   const [pendingLoansCount, setPendingLoansCount] = useState<number>(0);
   const [totalLoansCount, setTotalLoansCount] = useState<number>(0);
+  const [pendingWithdrawalsCount, setPendingWithdrawalsCount] = useState<number>(0);
+  const [totalWithdrawalsCount, setTotalWithdrawalsCount] = useState<number>(0);
   const [loginRecords, setLoginRecords] = useState<any[]>([]);
 
 
@@ -58,6 +60,18 @@ export default function ConsolePage() {
         console.error('Failed to load loan stats:', err);
       });
 
+    // Real-time withdrawals count from Firestore
+    try {
+      const { getFirebaseFirestore } = require('@bspc/firebase');
+      const { collection, onSnapshot } = require('firebase/firestore');
+      const db = getFirebaseFirestore();
+      const unsubWd = onSnapshot(collection(db, 'withdrawalRequests'), (snap: any) => {
+        setTotalWithdrawalsCount(snap.docs.length);
+        setPendingWithdrawalsCount(snap.docs.filter((d: any) => d.data().status === 'pending').length);
+      });
+      return () => unsubWd();
+    } catch (_) {}
+
     loginEventRepository
       .listLoginEvents(15) // fetch recent 15 logins
       .then((events: DbLoginEvent[]) => {
@@ -87,8 +101,15 @@ export default function ConsolePage() {
         actions={
           <div className="flex gap-2">
             <Link
-              href="/admin/loans"
+              href="/admin/withdrawals"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-all"
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Withdrawals ({pendingWithdrawalsCount} Pending)
+            </Link>
+            <Link
+              href="/admin/loans"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-slate-800 hover:bg-slate-700 text-white shadow-sm transition-all"
             >
               <Landmark className="w-3.5 h-3.5" />
               Loan Requests ({pendingLoansCount} Pending)

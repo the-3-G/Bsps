@@ -76,6 +76,7 @@ export default function AccountPage() {
   const [totalOutputEth, setTotalOutputEth] = useState<number>(0.0);
   const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number>(0.0);
   const [exchangeableEth, setExchangeableEth] = useState<number>(0.0);
+  const [interestBalanceUsdc, setInterestBalanceUsdc] = useState<number>(0.0);
 
   // VIP & Tier details (matching Image 1)
   const [vipLevel, setVipLevel] = useState<number>(1);
@@ -186,6 +187,12 @@ export default function AccountPage() {
           if (!isNaN(depUsdc) && depUsdc > 0) setWalletBalanceUsdc(depUsdc);
           if (rec.tier || rec.stakingType) setVipName(rec.tier || rec.stakingType);
         }
+
+        const interestStored = localStorage.getItem(`bspc_interest_${addr}`);
+        if (interestStored) {
+          const parsedInterest = parseFloat(interestStored);
+          if (!isNaN(parsedInterest)) setInterestBalanceUsdc(parsedInterest);
+        }
       } catch (_) {}
     };
 
@@ -210,6 +217,8 @@ export default function AccountPage() {
         if (d.totalOutputEth !== undefined) setTotalOutputEth(Number(d.totalOutputEth));
         if (d.walletBalanceUsdc !== undefined) setWalletBalanceUsdc(Number(d.walletBalanceUsdc));
         if (d.exchangeableEth !== undefined) setExchangeableEth(Number(d.exchangeableEth));
+        if (d.interestBalanceUsdc !== undefined) setInterestBalanceUsdc(Number(d.interestBalanceUsdc));
+        else if (d.withdrawableInterestUsdc !== undefined) setInterestBalanceUsdc(Number(d.withdrawableInterestUsdc));
         if (d.vipLevel !== undefined) setVipLevel(d.vipLevel);
         if (d.vipName) setVipName(d.vipName);
         if (d.totalPledged !== undefined) setTotalPledged(d.totalPledged);
@@ -257,7 +266,7 @@ export default function AccountPage() {
     setExchangeAmount(exchangeableEth.toFixed(8).replace(/\.?0+$/, ''));
   };
 
-  // Handle Exchange submission
+  // Handle Exchange submission (Converts earned ETH interest to withdrawable USDC interest)
   const handleExchange = async () => {
     const amt = parseFloat(exchangeAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -275,10 +284,14 @@ export default function AccountPage() {
     try {
       const usdcReceived = amt * ETH_USDC_RATE;
       const newExchangeable = Math.max(0, exchangeableEth - amt);
-      const newWalletUsdc = walletBalanceUsdc + usdcReceived;
+      const newInterestBalance = interestBalanceUsdc + usdcReceived;
 
       setExchangeableEth(newExchangeable);
-      setWalletBalanceUsdc(newWalletUsdc);
+      setInterestBalanceUsdc(newInterestBalance);
+
+      if (typeof window !== 'undefined' && address) {
+        localStorage.setItem(`bspc_interest_${address.toLowerCase()}`, newInterestBalance.toString());
+      }
 
       const newRecord: TransactionRecord = {
         id: `ex-${Date.now()}`,
@@ -300,7 +313,8 @@ export default function AccountPage() {
             doc(db, 'users', uid),
             {
               exchangeableEth: newExchangeable,
-              walletBalanceUsdc: newWalletUsdc,
+              interestBalanceUsdc: newInterestBalance,
+              withdrawableInterestUsdc: newInterestBalance,
               totalOutputEth: totalOutputEth,
               updatedAt: serverTimestamp(),
             },
@@ -323,7 +337,7 @@ export default function AccountPage() {
 
       setToast({
         type: 'ok',
-        message: `Successfully exchanged ${amt.toFixed(4)} ETH for ${usdcReceived.toFixed(2)} USDC!`,
+        message: `Successfully exchanged ${amt.toFixed(4)} ETH for ${usdcReceived.toFixed(2)} USDC interest!`,
       });
       setExchangeAmount('0.0');
     } catch (err: any) {
@@ -333,17 +347,25 @@ export default function AccountPage() {
     }
   };
 
-  // Handle Withdraw submission
+  // Handle Withdraw submission (Withdraws strictly generated interest, minimum 1 USDC, wallet balance remains in wallet)
   const handleWithdraw = async () => {
     const amt = parseFloat(withdrawAmount);
-    if (isNaN(amt) || amt <= 0) {
-      setToast({ type: 'err', message: 'Please enter a valid USDC amount to withdraw.' });
+    
+    // Minimum 1 USDC check - show 'low interest amount' error
+    if (isNaN(amt) || amt < 1) {
+      setToast({ type: 'err', message: 'low interest amount' });
       return;
     }
-    if (amt > walletBalanceUsdc) {
-      setToast({ type: 'err', message: `Insufficient wallet balance. Available: ${walletBalanceUsdc.toFixed(2)} USDC` });
+
+    if (amt > interestBalanceUsdc) {
+      if (interestBalanceUsdc < 1) {
+        setToast({ type: 'err', message: 'low interest amount' });
+      } else {
+        setToast({ type: 'err', message: `Insufficient interest balance. Available: ${interestBalanceUsdc.toFixed(2)} USDC` });
+      }
       return;
     }
+
     if (!withdrawAddress.trim()) {
       setToast({ type: 'err', message: 'Please specify a destination wallet address.' });
       return;
@@ -353,8 +375,12 @@ export default function AccountPage() {
     setToast(null);
 
     try {
-      const newWalletUsdc = Math.max(0, walletBalanceUsdc - amt);
-      setWalletBalanceUsdc(newWalletUsdc);
+      const newInterestBalance = Math.max(0, interestBalanceUsdc - amt);
+      setInterestBalanceUsdc(newInterestBalance);
+
+      if (typeof window !== 'undefined' && address) {
+        localStorage.setItem(`bspc_interest_${address.toLowerCase()}`, newInterestBalance.toString());
+      }
 
       const newRecord: TransactionRecord = {
         id: `wd-${Date.now()}`,
@@ -367,6 +393,27 @@ export default function AccountPage() {
 
       setRecords((prev) => [newRecord, ...prev]);
 
+      const cleanAddr = address ? address.trim() : '';
+      const userShortId = cleanAddr ? cleanAddr.slice(-4).toUpperCase() : 'USER';
+      const notifMessage = `Id ${userShortId} is withdrawing interest: ${amt.toFixed(2)} USDC`;
+
+      // Dispatch local event for instant admin panel synchronization across tabs
+      if (typeof window !== 'undefined') {
+        const notifPayload = {
+          id: `wd-${Date.now()}`,
+          userShortId,
+          walletAddress: address || '',
+          destinationAddress: withdrawAddress.trim(),
+          amount: amt,
+          amountUsdc: amt,
+          message: notifMessage,
+          time: 'Just now',
+          timestamp: Date.now(),
+        };
+        localStorage.setItem('bspc_latest_withdrawal_notif', JSON.stringify(notifPayload));
+        window.dispatchEvent(new CustomEvent('bspc_withdrawal_notification', { detail: notifPayload }));
+      }
+
       // Save to Firestore if connected
       if (address) {
         try {
@@ -375,7 +422,8 @@ export default function AccountPage() {
           await setDoc(
             doc(db, 'users', uid),
             {
-              walletBalanceUsdc: newWalletUsdc,
+              interestBalanceUsdc: newInterestBalance,
+              withdrawableInterestUsdc: newInterestBalance,
               updatedAt: serverTimestamp(),
             },
             { merge: true }
@@ -384,14 +432,19 @@ export default function AccountPage() {
           await addDoc(collection(db, 'withdrawalRequests'), {
             userUid: uid,
             walletAddress: address,
+            userShortId: userShortId,
             destinationAddress: withdrawAddress.trim(),
             chainId: 1,
             tokenAddress: 'USDC',
             amountBaseUnits: amt.toString(),
+            amountUsdc: amt,
             feeBaseUnits: '0',
-            status: 'approved',
+            type: 'interest_withdrawal',
+            message: notifMessage,
+            status: 'pending',
             submittedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
           });
         } catch (dbErr) {
           console.warn('Firestore withdrawal request sync warning:', dbErr);
@@ -400,7 +453,7 @@ export default function AccountPage() {
 
       setToast({
         type: 'ok',
-        message: `Withdrawal request for ${amt.toFixed(2)} USDC submitted successfully!`,
+        message: `Withdrawal request for ${amt.toFixed(2)} USDC interest submitted successfully!`,
       });
       setWithdrawAmount('');
     } catch (err: any) {
@@ -777,7 +830,7 @@ export default function AccountPage() {
                   }}
                 />
                 <button
-                  onClick={() => setWithdrawAmount(walletBalanceUsdc.toString())}
+                  onClick={() => setWithdrawAmount(interestBalanceUsdc > 0 ? interestBalanceUsdc.toFixed(2) : '0')}
                   style={{
                     background: 'rgba(255, 211, 77, 0.1)',
                     border: '1px solid rgba(255, 211, 77, 0.3)',
@@ -795,7 +848,7 @@ export default function AccountPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#8F98A6', marginTop: 6, padding: '0 2px' }}>
-                <span>Available: {walletBalanceUsdc.toFixed(2)} USDC</span>
+                <span>Available: {interestBalanceUsdc.toFixed(2)} USDC</span>
                 <span>Fee: <strong style={{ color: '#00E6CC' }}>0.00 USDC</strong></span>
               </div>
             </div>

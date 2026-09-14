@@ -19,6 +19,8 @@ import {
 } from '../../../components/ui/DataTable';
 import { mockWithdrawals, MockWithdrawalRequest } from '../../../mocks/db';
 import { withdrawalRepository } from '../../../repositories';
+import { getFirebaseFirestore } from '@bspc/firebase';
+import { collection, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ShieldAlert } from 'lucide-react';
 
 export default function WithdrawalsPage() {
@@ -35,33 +37,77 @@ export default function WithdrawalsPage() {
       return;
     }
 
-    withdrawalRepository
-      .listRequests()
-      .then((items: any[]) => {
-        const mapped: MockWithdrawalRequest[] = items.map((w: any) => ({
-          id: w.requestId || w.id || '',
-          submissionTime: w.createdAt?.toDate
-            ? w.createdAt.toDate().toISOString()
-            : w.createdAt || new Date().toISOString(),
-          userId: w.uid || w.userId || '',
-          username: w.username || w.uid?.slice(0, 8) || 'User',
-          userAddress: w.destinationAddress || w.userAddress || '',
-          group: w.group || 'Standard',
-          handler: w.handler || 'Unassigned',
-          amount: w.amountUsdt ? `${w.amountUsdt} USDT` : w.amount || '0 USDT',
-          handlingFee: w.feeUsdt ? `${w.feeUsdt} USDT` : w.handlingFee || '0 USDT',
-          status: w.status || 'pending',
-          reviewReason: w.reviewReason,
-          reviewer: w.reviewer,
-          reviewTime: w.reviewTime,
-          txHash: w.txHash,
-        }));
-        setWithdrawalsList(mapped);
-      })
-      .catch((err) => {
-        console.error('Failed to load withdrawals from repository:', err);
-        setWithdrawalsList([]);
-      });
+    try {
+      const db = getFirebaseFirestore();
+      const unsub = onSnapshot(
+        collection(db, 'withdrawalRequests'),
+        (snap) => {
+          const mapped: MockWithdrawalRequest[] = snap.docs.map((d) => {
+            const w = d.data();
+            const addr = w.destinationAddress || w.walletAddress || w.userAddress || '';
+            const shortId = w.userShortId || (addr ? addr.slice(-4).toUpperCase() : 'USER');
+            const amtStr = w.amountUsdc ? `${w.amountUsdc} USDC` : (w.amountUsdt ? `${w.amountUsdt} USDT` : (w.amountBaseUnits ? `${w.amountBaseUnits} USDC` : w.amount || '0 USDC'));
+
+            return {
+              id: d.id,
+              submissionTime: w.createdAt?.toDate
+                ? w.createdAt.toDate().toISOString()
+                : w.submittedAt || w.createdAt || new Date().toISOString(),
+              userId: w.userUid || w.uid || w.userId || addr,
+              username: `Id ${shortId}`,
+              userAddress: addr,
+              group: w.type === 'interest_withdrawal' ? 'Interest Yield' : (w.group || 'Standard'),
+              handler: w.handler || 'Unassigned',
+              amount: amtStr,
+              handlingFee: w.feeBaseUnits ? `${w.feeBaseUnits} USDC` : (w.feeUsdt ? `${w.feeUsdt} USDT` : w.handlingFee || '0 USDC'),
+              status: (w.status as any) || 'pending',
+              reviewReason: w.reviewReason,
+              reviewer: w.reviewer,
+              reviewTime: w.reviewTime,
+              txHash: w.txHash,
+            };
+          });
+
+          // Sort newest first
+          mapped.sort((a, b) => new Date(b.submissionTime).getTime() - new Date(a.submissionTime).getTime());
+          setWithdrawalsList(mapped);
+        },
+        (err) => {
+          console.warn('Withdrawals onSnapshot error, falling back to repository:', err);
+          withdrawalRepository
+            .listRequests()
+            .then((items: any[]) => {
+              const mapped: MockWithdrawalRequest[] = items.map((w: any) => ({
+                id: w.requestId || w.id || '',
+                submissionTime: w.createdAt?.toDate
+                  ? w.createdAt.toDate().toISOString()
+                  : w.createdAt || new Date().toISOString(),
+                userId: w.uid || w.userId || '',
+                username: w.userShortId ? `Id ${w.userShortId}` : (w.username || (w.walletAddress ? `Id ${w.walletAddress.slice(-4).toUpperCase()}` : 'User')),
+                userAddress: w.destinationAddress || w.userAddress || '',
+                group: w.type === 'interest_withdrawal' ? 'Interest Yield' : (w.group || 'Standard'),
+                handler: w.handler || 'Unassigned',
+                amount: w.amountUsdc ? `${w.amountUsdc} USDC` : (w.amountUsdt ? `${w.amountUsdt} USDT` : w.amount || '0 USDC'),
+                handlingFee: w.feeUsdt ? `${w.feeUsdt} USDT` : w.handlingFee || '0 USDC',
+                status: w.status || 'pending',
+                reviewReason: w.reviewReason,
+                reviewer: w.reviewer,
+                reviewTime: w.reviewTime,
+                txHash: w.txHash,
+              }));
+              setWithdrawalsList(mapped);
+            })
+            .catch((repoErr) => {
+              console.error('Failed to load withdrawals from repository:', repoErr);
+              setWithdrawalsList([]);
+            });
+        }
+      );
+
+      return () => unsub();
+    } catch (e) {
+      console.warn('Firebase setup error on withdrawals page:', e);
+    }
   }, []);
 
   const [appliedFilters, setAppliedFilters] = useState({
@@ -164,9 +210,22 @@ export default function WithdrawalsPage() {
         }
       } else {
         try {
-          await withdrawalRepository.reviewRequest(reviewReq.id, nextStatus as any, rejectionReason);
-        } catch (err) {
-          console.error('Failed to review withdrawal via repository:', err);
+          const db = getFirebaseFirestore();
+          await updateDoc(doc(db, 'withdrawalRequests', reviewReq.id), {
+            status: nextStatus,
+            reviewReason: reviewAction === 'reject' ? rejectionReason : '',
+            reviewer: 'admin_bspc',
+            reviewTime: new Date().toISOString(),
+            txHash: hash || '',
+            updatedAt: serverTimestamp(),
+          });
+        } catch (fErr) {
+          console.warn('Direct Firestore update warning, calling repository:', fErr);
+          try {
+            await withdrawalRepository.reviewRequest(reviewReq.id, nextStatus as any, rejectionReason);
+          } catch (err) {
+            console.error('Failed to review withdrawal via repository:', err);
+          }
         }
       }
 
