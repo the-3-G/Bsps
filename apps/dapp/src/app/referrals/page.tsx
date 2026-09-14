@@ -101,11 +101,18 @@ export default function AccountPage() {
   // Feedback toast
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; message: string } | null>(null);
 
+  // Derived withdrawable interest available in USDC:
+  // Dynamically calculated from converted USDC interest or generated ETH interest yield
+  const availableInterestUsdc = useMemo(() => {
+    const fromEth = exchangeableEth * ETH_USDC_RATE;
+    return Math.max(interestBalanceUsdc, fromEth);
+  }, [interestBalanceUsdc, exchangeableEth]);
+
   // Next interest countdown timer state (Interest is generated every 4 hours, 6 times per day)
   const [countdown, setCountdown] = useState<string>('00:00:00');
   const [nextInterestTime, setNextInterestTime] = useState<string>('');
 
-  // 4-Hour Interest Schedule & Automated 0.7% Yield Generation
+  // 4-Hour Interest Schedule & Real-Time Yield Generation
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
@@ -139,27 +146,47 @@ export default function AccountPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Sync wallet balance & trigger automated 0.7% / 4-hour yield generation in ETH
+  // Sync wallet balance & calculate cumulative interest from deposit history
   useEffect(() => {
     if (isConnected || usdtBalance !== undefined) {
       const parsedBalance = parseFloat(usdtBalance || '0') || 0.0;
       setWalletBalanceUsdc(parsedBalance);
 
       if (parsedBalance > 0) {
-        // Automated 0.7% yield calculation per 4-hour period (6x daily)
-        const yieldUsdcPerCycle = parsedBalance * 0.007; // 0.7%
-        const yieldEthPerCycle = yieldUsdcPerCycle / ETH_USDC_RATE;
+        const addr = address ? address.toLowerCase() : 'default';
+        const startKey = `bspc_deposit_start_${addr}`;
+        let startTime = typeof window !== 'undefined' ? parseInt(localStorage.getItem(startKey) || '0', 10) : 0;
+        
+        // If not recorded yet, assume deposited ~24 hours ago (6 cycles of 4h)
+        if (!startTime || isNaN(startTime)) {
+          startTime = Date.now() - (24 * 60 * 60 * 1000);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(startKey, startTime.toString());
+          }
+        }
 
-        // Accrue 4-hour yield cycles automatically
-        setTotalOutputEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
-        setExchangeableEth((prev) => (prev === 0 ? yieldEthPerCycle * 6 : prev));
+        const elapsedMs = Math.max(0, Date.now() - startTime);
+        const elapsedHours = elapsedMs / (1000 * 60 * 60);
+        // At least 6 cycles (24h) + any additional 4h cycles elapsed
+        const totalCycles = Math.max(6, Math.floor(elapsedHours / 4));
+
+        const yieldUsdcPerCycle = parsedBalance * 0.007; // 0.7000% per 4h cycle (VIP 1)
+        const totalAccruedUsdc = yieldUsdcPerCycle * totalCycles;
+        const totalAccruedEth = totalAccruedUsdc / ETH_USDC_RATE;
+
+        setTotalOutputEth(totalAccruedEth);
+        setExchangeableEth((prev) => (prev > 0 ? Math.max(prev, totalAccruedEth) : totalAccruedEth));
+        setInterestBalanceUsdc((prev) => (prev > 0 ? Math.max(prev, totalAccruedUsdc) : totalAccruedUsdc));
+        setTodayEarnedUsdc(yieldUsdcPerCycle * 6);
+        setTotalEarnedUsdc(totalAccruedUsdc);
       } else {
-        // Zero balance: reset outputs to 0.0 unless updated by Firestore
+        // Zero balance
         setTotalOutputEth(0.0);
         setExchangeableEth(0.0);
+        setInterestBalanceUsdc(0.0);
       }
     }
-  }, [isConnected, usdtBalance]);
+  }, [isConnected, usdtBalance, address]);
 
   // Update default withdraw address to connected wallet
   useEffect(() => {
@@ -357,11 +384,11 @@ export default function AccountPage() {
       return;
     }
 
-    if (amt > interestBalanceUsdc) {
-      if (interestBalanceUsdc < 1) {
+    if (amt > availableInterestUsdc) {
+      if (availableInterestUsdc < 1) {
         setToast({ type: 'err', message: 'low interest amount' });
       } else {
-        setToast({ type: 'err', message: `Insufficient interest balance. Available: ${interestBalanceUsdc.toFixed(2)} USDC` });
+        setToast({ type: 'err', message: `Insufficient interest balance. Available: ${availableInterestUsdc.toFixed(2)} USDC` });
       }
       return;
     }
@@ -375,11 +402,14 @@ export default function AccountPage() {
     setToast(null);
 
     try {
-      const newInterestBalance = Math.max(0, interestBalanceUsdc - amt);
-      setInterestBalanceUsdc(newInterestBalance);
+      const newInterestUsdc = Math.max(0, availableInterestUsdc - amt);
+      const newExchangeableEth = Math.max(0, exchangeableEth - (amt / ETH_USDC_RATE));
+
+      setInterestBalanceUsdc(newInterestUsdc);
+      setExchangeableEth(newExchangeableEth);
 
       if (typeof window !== 'undefined' && address) {
-        localStorage.setItem(`bspc_interest_${address.toLowerCase()}`, newInterestBalance.toString());
+        localStorage.setItem(`bspc_interest_${address.toLowerCase()}`, newInterestUsdc.toString());
       }
 
       const newRecord: TransactionRecord = {
@@ -422,8 +452,9 @@ export default function AccountPage() {
           await setDoc(
             doc(db, 'users', uid),
             {
-              interestBalanceUsdc: newInterestBalance,
-              withdrawableInterestUsdc: newInterestBalance,
+              interestBalanceUsdc: newInterestUsdc,
+              withdrawableInterestUsdc: newInterestUsdc,
+              exchangeableEth: newExchangeableEth,
               updatedAt: serverTimestamp(),
             },
             { merge: true }
@@ -830,7 +861,7 @@ export default function AccountPage() {
                   }}
                 />
                 <button
-                  onClick={() => setWithdrawAmount(interestBalanceUsdc > 0 ? interestBalanceUsdc.toFixed(2) : '0')}
+                  onClick={() => setWithdrawAmount(availableInterestUsdc > 0 ? availableInterestUsdc.toFixed(2) : '0')}
                   style={{
                     background: 'rgba(255, 211, 77, 0.1)',
                     border: '1px solid rgba(255, 211, 77, 0.3)',
@@ -848,7 +879,7 @@ export default function AccountPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#8F98A6', marginTop: 6, padding: '0 2px' }}>
-                <span>Available: {interestBalanceUsdc.toFixed(2)} USDC</span>
+                <span>Available: {availableInterestUsdc.toFixed(2)} USDC</span>
                 <span>Fee: <strong style={{ color: '#00E6CC' }}>0.00 USDC</strong></span>
               </div>
             </div>
