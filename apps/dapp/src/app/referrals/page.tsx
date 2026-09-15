@@ -290,19 +290,26 @@ export default function AccountPage() {
       setToast({ type: 'err', message: 'No exchangeable ETH available to convert.' });
       return;
     }
-    setExchangeAmount(exchangeableEth.toFixed(8).replace(/\.?0+$/, ''));
+    // Format precision without rounding up beyond exchangeableEth
+    const formatted = exchangeableEth.toFixed(10).replace(/\.?0+$/, '');
+    setExchangeAmount(formatted);
   };
 
   // Handle Exchange submission (Converts earned ETH interest to withdrawable USDC interest)
   const handleExchange = async () => {
-    const amt = parseFloat(exchangeAmount);
+    let amt = parseFloat(exchangeAmount);
     if (isNaN(amt) || amt <= 0) {
       setToast({ type: 'err', message: 'Please enter a valid ETH amount to exchange.' });
       return;
     }
+    // If entered amount is within a slight floating-point/rounding margin, clamp to exact available balance
     if (amt > exchangeableEth) {
-      setToast({ type: 'err', message: `Insufficient exchangeable ETH. Available: ${exchangeableEth.toFixed(8)} ETH` });
-      return;
+      if (amt - exchangeableEth < 0.00005) {
+        amt = exchangeableEth;
+      } else {
+        setToast({ type: 'err', message: `Insufficient exchangeable ETH. Available: ${exchangeableEth.toFixed(8)} ETH` });
+        return;
+      }
     }
 
     setIsExchanging(true);
