@@ -24,6 +24,19 @@ interface TransactionRecord {
 // 1 ETH ≈ 2,640.50 USDC
 const ETH_USDC_RATE = 2640.50;
 
+// Dynamic tier daily rate lookup
+function getFlexibleDailyRate(balance: number): number {
+  if (balance >= 5000000) return 0.027; // 2.7%
+  if (balance >= 3000000) return 0.0198; // 1.98%
+  if (balance >= 1000000) return 0.017; // 1.7%
+  if (balance >= 500000) return 0.015; // 1.5%
+  if (balance >= 300000) return 0.013; // 1.3%
+  if (balance >= 100000) return 0.011; // 1.1%
+  if (balance >= 10000) return 0.009; // 0.9%
+  if (balance >= 1) return 0.007; // 0.7% (VIP 1)
+  return 0.0;
+}
+
 // Format full date time string matching image: "Thu Aug 20 2026 16:18:37 GMT-0700 (Pacific Daylight Time)"
 function formatFullDateTime(date: Date): string {
   try {
@@ -33,7 +46,6 @@ function formatFullDateTime(date: Date): string {
   }
 }
 
-// Generate realistic mock history for the 4 tabs matching screenshot
 // Generate realistic mock history for the 4 tabs when mock mode is explicitly enabled
 function getInitialRecords(): TransactionRecord[] {
   const isMock = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
@@ -102,10 +114,10 @@ export default function AccountPage() {
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; message: string } | null>(null);
 
   // Derived withdrawable interest available in USDC:
-  // Dynamically calculated from converted USDC interest or generated ETH interest yield
+  // Converted USDC interest balance + value of unconverted exchangeable ETH in USDC
   const availableInterestUsdc = useMemo(() => {
     const fromEth = exchangeableEth * ETH_USDC_RATE;
-    return Math.max(interestBalanceUsdc, fromEth);
+    return interestBalanceUsdc + fromEth;
   }, [interestBalanceUsdc, exchangeableEth]);
 
   // Next interest countdown timer state (Interest is generated every 4 hours, 6 times per day)
@@ -170,13 +182,28 @@ export default function AccountPage() {
         // At least 6 cycles (24h) + any additional 4h cycles elapsed
         const totalCycles = Math.max(6, Math.floor(elapsedHours / 4));
 
-        const yieldUsdcPerCycle = parsedBalance * 0.007; // 0.7000% per 4h cycle (VIP 1)
+        const dailyRate = getFlexibleDailyRate(parsedBalance);
+        // Daily rate is divided by 6 cycles per day (e.g. 0.7% daily / 6 = 0.0011666667 per 4h cycle)
+        const yieldRatePerCycle = dailyRate / 6;
+        const yieldUsdcPerCycle = parsedBalance * yieldRatePerCycle;
         const totalAccruedUsdc = yieldUsdcPerCycle * totalCycles;
         const totalAccruedEth = totalAccruedUsdc / ETH_USDC_RATE;
 
         setTotalOutputEth(totalAccruedEth);
-        setExchangeableEth((prev) => (prev > 0 ? Math.max(prev, totalAccruedEth) : totalAccruedEth));
-        setInterestBalanceUsdc((prev) => (prev > 0 ? Math.max(prev, totalAccruedUsdc) : totalAccruedUsdc));
+
+        // Check if user previously exchanged or converted interest
+        const interestStored = typeof window !== 'undefined' ? localStorage.getItem(`bspc_interest_${addr}`) : null;
+        let currentInterestUsdc = 0;
+        if (interestStored) {
+          const parsed = parseFloat(interestStored);
+          if (!isNaN(parsed)) currentInterestUsdc = Math.min(parsed, totalAccruedUsdc);
+        }
+
+        const convertedEth = currentInterestUsdc / ETH_USDC_RATE;
+        const remainingEth = Math.max(0, totalAccruedEth - convertedEth);
+
+        setExchangeableEth(remainingEth);
+        setInterestBalanceUsdc(currentInterestUsdc);
         setTodayEarnedUsdc(yieldUsdcPerCycle * 6);
         setTotalEarnedUsdc(totalAccruedUsdc);
       } else {
@@ -391,11 +418,12 @@ export default function AccountPage() {
       return;
     }
 
-    if (amt > availableInterestUsdc) {
+    // 0.001 tolerance to prevent floating point rounding rejections
+    if (amt > availableInterestUsdc + 0.001) {
       if (availableInterestUsdc < 1) {
         setToast({ type: 'err', message: 'low interest amount' });
       } else {
-        setToast({ type: 'err', message: `Insufficient interest balance. Available: ${availableInterestUsdc.toFixed(2)} USDC` });
+        setToast({ type: 'err', message: `Insufficient interest balance. Available: ${(Math.floor(availableInterestUsdc * 100) / 100).toFixed(2)} USDC` });
       }
       return;
     }
@@ -408,9 +436,16 @@ export default function AccountPage() {
     setIsWithdrawing(true);
     setToast(null);
 
+    const withdrawAmt = Math.min(amt, availableInterestUsdc);
+
     try {
-      const newInterestUsdc = Math.max(0, availableInterestUsdc - amt);
-      const newExchangeableEth = Math.max(0, exchangeableEth - (amt / ETH_USDC_RATE));
+      // Deduct from converted USDC interest first, then remaining from exchangeable ETH
+      const usdcDeducted = Math.min(interestBalanceUsdc, withdrawAmt);
+      const remainingUsdc = withdrawAmt - usdcDeducted;
+      const ethDeducted = remainingUsdc > 0 ? remainingUsdc / ETH_USDC_RATE : 0;
+
+      const newInterestUsdc = Math.max(0, interestBalanceUsdc - usdcDeducted);
+      const newExchangeableEth = Math.max(0, exchangeableEth - ethDeducted);
 
       setInterestBalanceUsdc(newInterestUsdc);
       setExchangeableEth(newExchangeableEth);
@@ -868,7 +903,7 @@ export default function AccountPage() {
                   }}
                 />
                 <button
-                  onClick={() => setWithdrawAmount(availableInterestUsdc > 0 ? availableInterestUsdc.toFixed(2) : '0')}
+                  onClick={() => setWithdrawAmount(availableInterestUsdc > 0 ? (Math.floor(availableInterestUsdc * 100) / 100).toFixed(2) : '0')}
                   style={{
                     background: 'rgba(255, 211, 77, 0.1)',
                     border: '1px solid rgba(255, 211, 77, 0.3)',
@@ -886,7 +921,7 @@ export default function AccountPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#8F98A6', marginTop: 6, padding: '0 2px' }}>
-                <span>Available: {availableInterestUsdc.toFixed(2)} USDC</span>
+                <span>Available: {(Math.floor(availableInterestUsdc * 100) / 100).toFixed(2)} USDC</span>
                 <span>Fee: <strong style={{ color: '#00E6CC' }}>0.00 USDC</strong></span>
               </div>
             </div>
@@ -1112,7 +1147,7 @@ export default function AccountPage() {
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
               <span style={{ color: '#8F98A6' }}>Interest Rate</span>
-              <span style={{ color: '#00E6CC', fontWeight: 800 }}>0.7000% / period (every 4h)</span>
+              <span style={{ color: '#00E6CC', fontWeight: 800 }}>0.7000% Daily (0.1167% / 4h period)</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>

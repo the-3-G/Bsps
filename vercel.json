@@ -1,5 +1,5 @@
 {
   "framework": "nextjs",
-  "buildCommand": "pnpm --filter admin build",
+  "buildCommand": "pnpm --filter dapp build",
   "outputDirectory": ".next"
 }

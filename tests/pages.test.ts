@@ -82,20 +82,25 @@ describe('Referrals & Withdraw Pages Unit Logic Tests', () => {
       expect(defaultState.exchangeableEth).toBe(0.0);
     });
 
-    it('automatically calculates 0.7% / 4-hour yield generation based on wallet USDC balance', () => {
+    it('automatically calculates 0.7% daily yield (divided by 6 for 4-hour cycles) based on wallet USDC balance', () => {
       const ETH_USDC_RATE = 2640.50;
-      const depositedUsdc = 1000.0; // 1,000 USDC balance
-      const yieldRatePer4h = 0.007; // 0.7% per 4-hour cycle
+      const dailyRateTier1 = 0.007; // 0.7% daily
+      const yieldRatePer4h = dailyRateTier1 / 6; // 0.0011666667 per 4h cycle
 
-      const yieldUsdcPer4h = depositedUsdc * yieldRatePer4h; // 7 USDC
-      const yieldEthPer4h = yieldUsdcPer4h / ETH_USDC_RATE;
+      // Test 37 USDC over 24 hours (6 cycles)
+      const userUsdc = 37.0;
+      const yieldUsdcPer4h = userUsdc * yieldRatePer4h;
+      const dailyYieldUsdc = yieldUsdcPer4h * 6;
+      expect(dailyYieldUsdc).toBeCloseTo(0.259, 3);
 
-      expect(yieldUsdcPer4h).toBe(7.0);
-      expect(yieldEthPer4h).toBeCloseTo(0.002651013, 6);
+      // Test 1,000 USDC over 24 hours (6 cycles)
+      const depositedUsdc = 1000.0;
+      const yield1000Per4h = depositedUsdc * yieldRatePer4h;
+      const dailyYield1000 = yield1000Per4h * 6;
+      const dailyYieldEth1000 = dailyYield1000 / ETH_USDC_RATE;
 
-      // 6 cycles per day (24 hours)
-      const dailyYieldEth = yieldEthPer4h * 6;
-      expect(dailyYieldEth).toBeCloseTo(0.015906078, 6);
+      expect(dailyYield1000).toBe(7.0);
+      expect(dailyYieldEth1000).toBeCloseTo(0.002651013, 6);
     });
 
     it('preserves exact decimal precision for withdrawal requests on admin dashboard', () => {
