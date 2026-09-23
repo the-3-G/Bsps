@@ -19,9 +19,10 @@
     "@bspc/firebase": "workspace:*",
     "@bspc/web3": "workspace:*",
     "@bspc/ui": "workspace:*",
-    "firebase": "^10.0.0"
+    "firebase": "^10.14.1"
   },
   "devDependencies": {
+    "@alloc/quick-lru": "^5.2.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
