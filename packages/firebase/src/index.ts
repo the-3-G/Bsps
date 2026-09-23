@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, Auth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, Auth, signInAnonymously } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, Firestore, FirestoreDataConverter, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator, Functions } from 'firebase/functions';
 import { initializeAppCheck, ReCaptchaV3Provider, AppCheck } from 'firebase/app-check';
@@ -130,6 +130,21 @@ export function getFirebaseAuth(): Auth {
     }
   }
   return cachedAuth;
+}
+
+export { signInAnonymously };
+
+/**
+ * Ensures that the client has an active anonymous auth session.
+ */
+export async function ensureAnonymousAuth(auth?: Auth): Promise<Auth> {
+  const a = auth || getFirebaseAuth();
+  if (!a.currentUser) {
+    try {
+      await signInAnonymously(a);
+    } catch (_) {}
+  }
+  return a;
 }
 
 /**

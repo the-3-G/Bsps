@@ -22,8 +22,8 @@ import { userRepository } from '../../../repositories';
 import { DbUser } from '@bspc/types';
 import Link from 'next/link';
 import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink, Sparkles, Plus, Check, X, Zap, Trash2 } from 'lucide-react';
-import { getFirebaseFirestore } from '@bspc/firebase';
-import { collection, onSnapshot, deleteDoc, doc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
+import { collection, onSnapshot, deleteDoc, doc, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 
 
 export default function UsersPage() {
@@ -229,17 +229,8 @@ export default function UsersPage() {
 
       // 2. Write to Firestore
       try {
-        const { getFirebaseAuth } = await import('@bspc/firebase');
-        const { signInAnonymously } = await import('firebase/auth');
-        const auth = getFirebaseAuth();
-        if (!auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (_) {}
-        }
-
+        await ensureAnonymousAuth();
         const db = getFirebaseFirestore();
-        const { doc, setDoc, serverTimestamp, arrayRemove } = await import('firebase/firestore');
         const numericId = contractFormId.replace(/^p-/, '');
         const idsToRestore = Array.from(new Set([contractFormId, `p-${numericId}`, numericId]));
 

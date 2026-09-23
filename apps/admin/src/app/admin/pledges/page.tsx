@@ -20,7 +20,7 @@ import {
 import { mockPledges, MockPledgeRecord } from '../../../mocks/db';
 import { pledgeRepository, userRepository } from '../../../repositories';
 import { Plus, Edit3, X, Check, Sparkles, Trash2 } from 'lucide-react';
-import { getFirebaseFirestore } from '@bspc/firebase';
+import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 export default function PledgesPage() {
@@ -393,15 +393,7 @@ export default function PledgesPage() {
 
       // 4. Write to Firestore (pledges collection + target user document sync + unblock deletedContracts)
       try {
-        const { getFirebaseAuth } = await import('@bspc/firebase');
-        const { signInAnonymously } = await import('firebase/auth');
-        const auth = getFirebaseAuth();
-        if (!auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (_) {}
-        }
-
+        await ensureAnonymousAuth();
         const db = getFirebaseFirestore();
         const pledgeDocRef = doc(db, 'pledges', formContractId);
         await setDoc(pledgeDocRef, recordData, { merge: true });
