@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../../context/Web3Context';
@@ -108,15 +108,54 @@ export default function TransferPage() {
     setMsg(null);
     try {
       const db = getFirebaseFirestore();
+      const shortId = address ? address.slice(-4).toUpperCase() : 'USER';
+      const notifMessage = `Id ${shortId} transferred ${amt.toFixed(2)} USDC (${from} → ${to})`;
+
       await addDoc(collection(db, 'poolTransfers'), {
         uid: address.toLowerCase(),
         walletAddress: address,
+        userShortId: shortId,
         from,
         to,
         amount: amt,
+        message: notifMessage,
         status: 'pending',
         createdAt: serverTimestamp(),
       });
+
+      // Also create a withdrawal/transfer review record in withdrawalRequests if moving out of pool or funding
+      await addDoc(collection(db, 'withdrawalRequests'), {
+        userUid: address.toLowerCase(),
+        walletAddress: address,
+        userShortId: shortId,
+        destinationAddress: address,
+        chainId: 1,
+        tokenAddress: 'USDC',
+        amountBaseUnits: amt.toString(),
+        amountUsdc: amt,
+        feeBaseUnits: '0',
+        type: `${from}_to_${to}_transfer`,
+        message: notifMessage,
+        status: 'pending',
+        submittedAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Broadcast real-time cross-tab event to notify admin immediately
+      const notifPayload = {
+        id: `wd-${Date.now()}`,
+        userShortId: shortId,
+        walletAddress: address,
+        amount: amt,
+        amountUsdc: amt,
+        message: notifMessage,
+        time: 'Just now',
+        timestamp: Date.now(),
+      };
+      localStorage.setItem('bspc_latest_withdrawal_notif', JSON.stringify(notifPayload));
+      window.dispatchEvent(new CustomEvent('bspc_withdrawal_notification', { detail: notifPayload }));
+
       setMsg({ type: 'ok', text: `Transfer of ${amt.toFixed(2)} USDC submitted successfully!` });
       setAmount('');
     } catch (e) {

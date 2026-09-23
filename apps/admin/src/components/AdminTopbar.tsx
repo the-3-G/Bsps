@@ -78,31 +78,102 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [activeAlert, setActiveAlert] = useState<{ id: string; message: string; link: string } | null>(null);
+  const [lastNotifiedWdId, setLastNotifiedWdId] = useState<string>('');
+
+  // Audio alert chime using Web Audio API (smooth 2-tone alert chime)
+  const playNotificationChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      // Tone 1: High crisp bell
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(659.25, now); // E5
+      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.12); // A5
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      // Tone 2: Harmonious chime
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(1318.51, now + 0.1); // E6
+      gain2.gain.setValueAtTime(0.25, now + 0.1);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.1);
+      osc2.stop(now + 0.5);
+    } catch {
+      /* ignore audio autoplay restrictions */
+    }
+  };
+
+  // Browser desktop notification helper
+  const triggerDesktopNotification = (title: string, body: string) => {
+    try {
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/favicon.ico',
+          });
+        } else if (Notification.permission === 'default') {
+          Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              new Notification(title, { body, icon: '/favicon.ico' });
+            }
+          });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    // Request desktop notification permission on mount
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     // 1. Listen for local storage cross-tab events
     const handleLocalWithdrawal = (e: any) => {
       const payload = e.detail || (e.key === 'bspc_latest_withdrawal_notif' && e.newValue ? JSON.parse(e.newValue) : null);
       if (payload && payload.message) {
+        const notifId = payload.id || `wd-${Date.now()}`;
         setActiveAlert({
-          id: payload.id || `wd-${Date.now()}`,
+          id: notifId,
           message: payload.message,
           link: '/admin/withdrawals',
         });
+        playNotificationChime();
+        triggerDesktopNotification('BSPC Admin: New Withdrawal Request', payload.message);
+
         setNotifications((prev) => [
           {
-            id: payload.id || `wd-${Date.now()}`,
+            id: notifId,
             type: 'withdrawal',
             title: 'Interest Withdrawal',
             message: payload.message,
             userShortId: payload.userShortId,
             address: payload.walletAddress,
-            amount: `${payload.amount} USDC`,
+            amount: `${payload.amount || payload.amountUsdc || '0'} USDC`,
             time: 'Just now',
             status: 'Pending Review',
             link: '/admin/withdrawals',
           },
-          ...prev.filter((item) => item.id !== payload.id),
+          ...prev.filter((item) => item.id !== notifId),
         ]);
       }
     };
@@ -144,14 +215,17 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
               });
             });
 
-            // If there's a new pending withdrawal, show alert banner
+            // If there's a new pending withdrawal, show alert banner & play chime
             const latestPending = wdNotifs.find((n) => n.status === 'Pending Review');
-            if (latestPending) {
+            if (latestPending && latestPending.id !== lastNotifiedWdId) {
+              setLastNotifiedWdId(latestPending.id);
               setActiveAlert({
                 id: latestPending.id,
                 message: latestPending.message,
                 link: latestPending.link,
               });
+              playNotificationChime();
+              triggerDesktopNotification('BSPC Admin: New Withdrawal Pending Review', latestPending.message);
             }
 
             setNotifications((prev) => {
@@ -204,7 +278,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
       if (unsubWithdrawals) unsubWithdrawals();
       if (unsubUsers) unsubUsers();
     };
-  }, [isMockMode]);
+  }, [isMockMode, lastNotifiedWdId]);
 
   // Auto-dismiss floating alert after 10 seconds
   useEffect(() => {
@@ -284,6 +358,33 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
           </span>
         )}
       </div>
+
+      {/* Center/Right Topbar Live Withdrawal Notification 📢 */}
+      {(() => {
+        const latestPending = notifications.find(
+          (n) => n.type === 'withdrawal' && (!n.status || n.status === 'Pending Review' || n.status === 'pending')
+        ) || (activeAlert ? { id: activeAlert.id, message: activeAlert.message, link: activeAlert.link } : null);
+
+        if (!latestPending) return null;
+
+        return (
+          <div className="flex-1 flex items-center justify-center sm:justify-end px-3 min-w-0 max-w-2xl">
+            <button
+              onClick={() => router.push(latestPending.link || '/admin/withdrawals')}
+              className="flex items-center gap-2 bg-gradient-to-r from-amber-50 via-amber-100 to-amber-50 border border-amber-400 text-amber-950 px-3.5 py-1 rounded-full cursor-pointer hover:shadow-md hover:border-amber-500 hover:from-amber-100 hover:to-amber-200 transition-all group shadow-sm text-left truncate"
+              title="Click to review withdrawal request"
+            >
+              <span className="text-sm shrink-0 animate-bounce">📢</span>
+              <span className="text-xs font-bold text-amber-900 truncate">
+                {latestPending.message}
+              </span>
+              <span className="bg-amber-500 group-hover:bg-amber-400 text-slate-950 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shrink-0 shadow-sm transition-all ml-1 flex items-center gap-1">
+                Review <span className="text-[9px]">→</span>
+              </span>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Right side actions */}
       <div className="flex items-center gap-2">

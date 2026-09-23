@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTabs } from '../context/TabContext';
@@ -62,6 +62,45 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const toggleGroup = (title: string) => {
     setExpandedGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   };
+
+  const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  const [pendingWithdrawalsCount, setPendingWithdrawalsCount] = useState<number>(0);
+
+  useEffect(() => {
+    // 1. Cross-tab event listener
+    const handleWdEvent = (e: any) => {
+      setPendingWithdrawalsCount((prev) => prev + 1);
+    };
+    window.addEventListener('bspc_withdrawal_notification', handleWdEvent);
+    window.addEventListener('storage', handleWdEvent);
+
+    // 2. Real-time Firestore count
+    let unsub: (() => void) | undefined;
+    if (!isMockMode) {
+      try {
+        import('@bspc/firebase').then(({ getFirebaseFirestore }) => {
+          import('firebase/firestore').then(({ collection, onSnapshot, query, where }) => {
+            const db = getFirebaseFirestore();
+            unsub = onSnapshot(collection(db, 'withdrawalRequests'), (snap) => {
+              const pending = snap.docs.filter((d) => {
+                const data = d.data();
+                return !data.status || data.status === 'pending' || data.status === 'pending_review';
+              });
+              setPendingWithdrawalsCount(pending.length);
+            });
+          });
+        }).catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return () => {
+      window.removeEventListener('bspc_withdrawal_notification', handleWdEvent);
+      window.removeEventListener('storage', handleWdEvent);
+      if (unsub) unsub();
+    };
+  }, [isMockMode]);
 
   const groups: SidebarGroup[] = [
     {
@@ -177,11 +216,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                           isActive
                             ? 'bg-teal-primary text-white font-semibold'
                             : 'hover:bg-gray-800/60 hover:text-white'
-                        } ${!isExpanded ? 'justify-center px-0' : ''}`}
+                        } ${!isExpanded ? 'justify-center px-0 relative' : ''}`}
                         title={item.label}
                       >
                         <span className="shrink-0">{item.icon}</span>
                         {isExpanded && <span className="truncate">{item.label}</span>}
+                        {item.path === '/admin/withdrawals' && pendingWithdrawalsCount > 0 && (
+                          isExpanded ? (
+                            <span className="ml-auto bg-amber-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
+                              {pendingWithdrawalsCount}
+                            </span>
+                          ) : (
+                            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
+                          )
+                        )}
                       </Link>
                     );
                   })}
