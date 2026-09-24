@@ -44,22 +44,44 @@ export default function WithdrawalsPage() {
         (snap) => {
           const mapped: MockWithdrawalRequest[] = snap.docs.map((d) => {
             const w = d.data();
-            const addr = w.destinationAddress || w.walletAddress || w.userAddress || '';
-            const shortId = w.userShortId || (addr ? addr.slice(-4).toUpperCase() : 'USER');
-            const amtStr = w.amountUsdc ? `${w.amountUsdc} USDC` : (w.amountUsdt ? `${w.amountUsdt} USDT` : (w.amountBaseUnits ? `${w.amountBaseUnits} USDC` : w.amount || '0 USDC'));
+            const addr = w.destinationAddress || w.walletAddress || w.userAddress || w.address || '';
+            const rawShortId = w.userShortId || (addr ? addr.slice(-4).toUpperCase() : (d.id ? d.id.slice(-4).toUpperCase() : 'USER'));
+            const displayUsername = w.username || (w.userShortId ? `Id ${w.userShortId}` : (addr ? `Id ${addr.slice(-4).toUpperCase()}` : `Id ${rawShortId}`));
+
+            // Robust amount resolution
+            let amtRaw = w.amountUsdc ?? w.amountUsdt ?? w.amount ?? w.usdcAmount ?? w.amountBaseUnits ?? w.quantity ?? w.value ?? 0;
+            let amtStr = '0.00 USDC';
+            if (typeof amtRaw === 'string' && (amtRaw.includes('USDC') || amtRaw.includes('USDT') || amtRaw.includes('ETH'))) {
+              amtStr = amtRaw;
+            } else {
+              const parsedNum = parseFloat(String(amtRaw)) || 0;
+              const unit = w.tokenAddress || (w.amountUsdt !== undefined ? 'USDT' : 'USDC');
+              amtStr = `${parsedNum > 0 ? parsedNum.toFixed(2) : '0'} ${unit}`;
+            }
+
+            // Robust fee resolution
+            let feeRaw = w.feeBaseUnits ?? w.feeUsdt ?? w.feeUsdc ?? w.handlingFee ?? w.fee ?? 0;
+            let feeStr = '0.00 USDC';
+            if (typeof feeRaw === 'string' && (feeRaw.includes('USDC') || feeRaw.includes('USDT') || feeRaw.includes('ETH'))) {
+              feeStr = feeRaw;
+            } else {
+              const parsedFee = parseFloat(String(feeRaw)) || 0;
+              const unit = w.amountUsdt !== undefined ? 'USDT' : 'USDC';
+              feeStr = `${parsedFee.toFixed(2)} ${unit}`;
+            }
 
             return {
               id: d.id,
               submissionTime: w.createdAt?.toDate
                 ? w.createdAt.toDate().toISOString()
                 : w.submittedAt || w.createdAt || new Date().toISOString(),
-              userId: w.userUid || w.uid || w.userId || addr,
-              username: `Id ${shortId}`,
+              userId: w.userUid || w.uid || w.userId || addr || d.id,
+              username: displayUsername,
               userAddress: addr,
-              group: w.type === 'interest_withdrawal' ? 'Interest Yield' : (w.group || 'Standard'),
+              group: w.type === 'interest_withdrawal' ? 'Interest Yield' : (w.group || (w.type ? w.type.replace(/_/g, ' ') : 'Standard')),
               handler: w.handler || 'Unassigned',
               amount: amtStr,
-              handlingFee: w.feeBaseUnits ? `${w.feeBaseUnits} USDC` : (w.feeUsdt ? `${w.feeUsdt} USDT` : w.handlingFee || '0 USDC'),
+              handlingFee: feeStr,
               status: (w.status as any) || 'pending',
               reviewReason: w.reviewReason,
               reviewer: w.reviewer,
@@ -77,24 +99,40 @@ export default function WithdrawalsPage() {
           withdrawalRepository
             .listRequests()
             .then((items: any[]) => {
-              const mapped: MockWithdrawalRequest[] = items.map((w: any) => ({
-                id: w.requestId || w.id || '',
-                submissionTime: w.createdAt?.toDate
-                  ? w.createdAt.toDate().toISOString()
-                  : w.createdAt || new Date().toISOString(),
-                userId: w.uid || w.userId || '',
-                username: w.userShortId ? `Id ${w.userShortId}` : (w.username || (w.walletAddress ? `Id ${w.walletAddress.slice(-4).toUpperCase()}` : 'User')),
-                userAddress: w.destinationAddress || w.userAddress || '',
-                group: w.type === 'interest_withdrawal' ? 'Interest Yield' : (w.group || 'Standard'),
-                handler: w.handler || 'Unassigned',
-                amount: w.amountUsdc ? `${w.amountUsdc} USDC` : (w.amountUsdt ? `${w.amountUsdt} USDT` : w.amount || '0 USDC'),
-                handlingFee: w.feeUsdt ? `${w.feeUsdt} USDT` : w.handlingFee || '0 USDC',
-                status: w.status || 'pending',
-                reviewReason: w.reviewReason,
-                reviewer: w.reviewer,
-                reviewTime: w.reviewTime,
-                txHash: w.txHash,
-              }));
+              const mapped: MockWithdrawalRequest[] = items.map((w: any) => {
+                const addr = w.destinationAddress || w.walletAddress || w.userAddress || w.address || '';
+                const rawShortId = w.userShortId || (addr ? addr.slice(-4).toUpperCase() : (w.id ? w.id.slice(-4).toUpperCase() : 'USER'));
+                const displayUsername = w.username || (w.userShortId ? `Id ${w.userShortId}` : (addr ? `Id ${addr.slice(-4).toUpperCase()}` : `Id ${rawShortId}`));
+
+                let amtRaw = w.amountUsdc ?? w.amountUsdt ?? w.amount ?? w.usdcAmount ?? w.amountBaseUnits ?? w.quantity ?? 0;
+                let amtStr = '0.00 USDC';
+                if (typeof amtRaw === 'string' && (amtRaw.includes('USDC') || amtRaw.includes('USDT') || amtRaw.includes('ETH'))) {
+                  amtStr = amtRaw;
+                } else {
+                  const parsedNum = parseFloat(String(amtRaw)) || 0;
+                  const unit = w.tokenAddress || (w.amountUsdt !== undefined ? 'USDT' : 'USDC');
+                  amtStr = `${parsedNum > 0 ? parsedNum.toFixed(2) : '0'} ${unit}`;
+                }
+
+                return {
+                  id: w.requestId || w.id || '',
+                  submissionTime: w.createdAt?.toDate
+                    ? w.createdAt.toDate().toISOString()
+                    : w.createdAt || new Date().toISOString(),
+                  userId: w.uid || w.userId || addr || w.id || '',
+                  username: displayUsername,
+                  userAddress: addr,
+                  group: w.type === 'interest_withdrawal' ? 'Interest Yield' : (w.group || 'Standard'),
+                  handler: w.handler || 'Unassigned',
+                  amount: amtStr,
+                  handlingFee: w.feeUsdt ? `${w.feeUsdt} USDT` : (w.feeUsdc ? `${w.feeUsdc} USDC` : w.handlingFee || '0.00 USDC'),
+                  status: w.status || 'pending',
+                  reviewReason: w.reviewReason,
+                  reviewer: w.reviewer,
+                  reviewTime: w.reviewTime,
+                  txHash: w.txHash,
+                };
+              });
               setWithdrawalsList(mapped);
             })
             .catch((repoErr) => {
