@@ -55,6 +55,48 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   const [userUid, setUserUid] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  // Dynamic Viewport tracking for mobile virtual keyboard in iOS Safari / Bitget Wallet
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleViewportChange = () => {
+      if (typeof window !== 'undefined' && window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        window.scrollTo(0, 0);
+      }
+    };
+
+    handleViewportChange();
+
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      window.visualViewport.addEventListener('scroll', handleViewportChange);
+    }
+
+    // Lock body scrolling when drawer is open to prevent page shift
+    const prevOverflow = document.body.style.overflow;
+    const prevPosition = document.body.style.position;
+    const prevWidth = document.body.style.width;
+    const prevHeight = document.body.style.height;
+
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+
+    return () => {
+      if (typeof window !== 'undefined' && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportChange);
+        window.visualViewport.removeEventListener('scroll', handleViewportChange);
+      }
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
+      document.body.style.width = prevWidth;
+      document.body.style.height = prevHeight;
+    };
+  }, [isOpen]);
 
   // Attachment, Input, and Lightbox states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -597,30 +639,40 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
 
   return (
     <div
-      className="fixed inset-0 z-[55] flex justify-center bg-black/80 backdrop-blur-sm touch-manipulation"
+      className="fixed inset-0 z-[55] flex justify-center bg-black/80 backdrop-blur-sm touch-manipulation overflow-hidden"
+      style={{
+        height: viewportHeight ? `${viewportHeight}px` : '100dvh',
+        maxHeight: viewportHeight ? `${viewportHeight}px` : '100dvh',
+      }}
       onPaste={handlePaste}
     >
-      <div className="w-full max-w-md bg-slate-950 flex flex-col h-[100dvh] max-h-[100dvh] border-x border-slate-800 shadow-2xl relative overscroll-contain">
+      <div
+        className="w-full max-w-md bg-slate-950 flex flex-col border-x border-slate-800 shadow-2xl relative overscroll-contain"
+        style={{
+          height: '100%',
+          maxHeight: '100%',
+        }}
+      >
         {/* Chat Header */}
-        <div className="flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20">
+        <div className="flex items-center justify-between p-3.5 bg-slate-900 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 shrink-0">
               <Headset className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-slate-100">BSP Support Center</span>
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-800 text-slate-300 rounded-full border border-slate-700">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-sm text-slate-100 truncate">BSP Support Center</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-800 text-slate-300 rounded-full border border-slate-700 shrink-0">
                   {guestLabel}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <Circle className={`w-2 h-2 fill-current ${
+                <Circle className={`w-2 h-2 fill-current shrink-0 ${
                   status === 'waiting' ? 'text-amber-400 animate-pulse' :
                   status === 'blocked' ? 'text-red-500' :
                   'text-teal-400'
                 }`} />
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[10px] text-slate-400 truncate">
                   {status === 'waiting' && 'Waiting for Support Agent...'}
                   {(status === 'assigned' || status === 'active') && 'Support Agent Connected'}
                   {status === 'closed' && 'Support Connected (Send to continue)'}
@@ -631,16 +683,16 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Message Thread */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950 flex flex-col">
-          <div className="p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5">
-            <Shield className="w-3.5 h-3.5 text-amber-400" />
+        <div className="flex-1 min-h-0 p-3.5 overflow-y-auto space-y-3 bg-slate-950 flex flex-col overscroll-contain">
+          <div className="p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5 shrink-0">
+            <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             Official BSP Customer Service. Confidential & Encrypted Session.
           </div>
 
@@ -823,7 +875,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         </div>
 
         {/* Input Bar */}
-        <div className="p-3 bg-slate-900 border-t border-slate-800">
+        <div className="p-2.5 bg-slate-900 border-t border-slate-800 shrink-0">
           {/* Staged File Preview */}
           {selectedFile && (
             <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl mb-2 flex items-center justify-between gap-3 shadow-inner">
@@ -860,7 +912,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
             </div>
           )}
 
-          <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
+          <form onSubmit={handleSendMessage} className="flex gap-1.5 items-end w-full">
             <input
               type="file"
               ref={fileInputRef}
@@ -872,8 +924,8 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isCreating || isUploading || status === 'blocked'}
-              className="p-2.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition-all self-end shrink-0 disabled:opacity-40"
-              title="Attach image (Cloudinary)"
+              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition-all self-end shrink-0 disabled:opacity-40"
+              title="Attach image"
             >
               <ImageIcon className="w-4 h-4" />
             </button>
@@ -881,7 +933,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
               type="button"
               onClick={handleQuickPaste}
               disabled={isCreating || isUploading || status === 'blocked'}
-              className="p-2.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition-all self-end shrink-0 disabled:opacity-40"
+              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition-all self-end shrink-0 disabled:opacity-40"
               title="Paste from clipboard"
             >
               <Clipboard className="w-4 h-4" />
@@ -889,7 +941,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
             <textarea
               ref={textareaRef}
               rows={1}
-              placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message (Shift+Enter for new line)..."}
+              placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message..."}
               value={inputText}
               onChange={handleInputChange}
               onPaste={handlePaste}
@@ -901,7 +953,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
               }}
               disabled={isCreating || isUploading || status === 'blocked'}
               style={{ fontSize: '16px' }}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[16px] sm:text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[16px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
             />
             <button
               type="submit"
