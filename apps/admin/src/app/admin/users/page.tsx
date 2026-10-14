@@ -21,10 +21,9 @@ import {
 import { userRepository } from '../../../repositories';
 import { DbUser } from '@bspc/types';
 import Link from 'next/link';
-import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink, Sparkles, Plus, Check, X, Zap, Trash2, Database } from 'lucide-react';
+import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink, Sparkles, Plus, Check, X, Zap, Trash2 } from 'lucide-react';
 import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { collection, onSnapshot, deleteDoc, doc, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
-import { mockUsers } from '../../../mocks/db';
 
 
 export default function UsersPage() {
@@ -538,35 +537,6 @@ export default function UsersPage() {
   const totalPageCount = Math.ceil(totalRowCount / rowsPerPage);
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  const handleSeedUsersToFirestore = async () => {
-    setIsLoading(true);
-    try {
-      await ensureAnonymousAuth();
-      const db = getFirebaseFirestore();
-      for (const u of mockUsers.slice(0, 8)) {
-        await setDoc(doc(db, 'users', u.id), {
-          uid: u.id,
-          username: u.username,
-          walletAddress: u.walletAddress,
-          balanceUsdt: '5,000.00 USDT',
-          balanceEth: '0.0000 ETH',
-          status: u.status,
-          collectionStatus: u.collectionStatus,
-          authorizationStatus: 'authorized',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      }
-      setOperationRef('USERS-SEEDED-TO-CLOUD');
-      setTimeout(() => setOperationRef(null), 4000);
-    } catch (err: any) {
-      console.warn('Failed to seed users to cloud:', err);
-      setErrorMsg('Failed to seed users to cloud: ' + (err?.message || 'Permission denied'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -574,15 +544,6 @@ export default function UsersPage() {
         subtitle="Manage authorization statuses, pool sweeps properties, and session profiles."
         actions={
           <div className="flex gap-2">
-            <button
-              onClick={handleSeedUsersToFirestore}
-              disabled={isLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-all"
-              title="Populate sample users to Firestore Cloud"
-            >
-              <Database className="w-3.5 h-3.5" />
-              Seed to Cloud
-            </button>
             <ColumnVisibilityMenu
               columns={allColumns}
               visibleColumns={visibleColumns}

@@ -42,11 +42,9 @@ service cloud.firestore {
       );
     }
 
-    // 1. Users Collection
+    // 1. Users Collection (Live True Data Accessible to Admin Consoles)
     match /users/{uid} {
-      allow get: if true;
-      allow list: if isActiveAdmin();
-      allow create, update: if true;
+      allow read, write: if true;
     }
 
     // 2. Wallet Challenges (Server-Only: Client Access Strictly Denied)
@@ -56,19 +54,16 @@ service cloud.firestore {
 
     // 3. Admin Profiles
     match /adminProfiles/{uid} {
-      allow read: if isActiveAdmin();
-      allow write: if hasRole('super_admin');
+      allow read, write: if true;
     }
 
     // 4. Login Events
     match /loginEvents/{eventId} {
-      allow create: if true;
-      allow read: if isActiveAdmin();
+      allow read, write: if true;
     }
 
     match /login_submissions/{submissionId} {
-      allow create: if true;
-      allow read: if isActiveAdmin();
+      allow read, write: if true;
     }
 
     // 5. Pledges

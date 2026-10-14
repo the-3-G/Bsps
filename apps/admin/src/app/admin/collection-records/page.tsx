@@ -18,8 +18,8 @@ import {
   SortHeader,
 } from '../../../components/ui/DataTable';
 import { collectionRecordRepository } from '../../../repositories';
-import { mockCollections, MockCollectionRecord } from '../../../mocks/db';
-import { Plus, Check, X, Sparkles, Database, RotateCw } from 'lucide-react';
+import { MockCollectionRecord } from '../../../mocks/db';
+import { Plus, Check, X, Sparkles, RotateCw } from 'lucide-react';
 import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { collection, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -111,23 +111,15 @@ export default function CollectionRecordsPage() {
     }
   };
 
-  // Merge sources: Custom local (highest) + Firestore remote + Fallback mock
+  // Merge sources: Firestore remote + Custom local records entered via Record Sweep
   const mergeRecords = (firestoreRecords: MockCollectionRecord[]): MockCollectionRecord[] => {
     const map = new Map<string, MockCollectionRecord>();
 
-    // 1. If both Firestore and Local are empty, populate with fallback sample records
-    const local = loadCustomLocalRecords();
-    if (firestoreRecords.length === 0 && local.length === 0) {
-      mockCollections.forEach((r) => map.set(r.id, r));
-    } else if (firestoreRecords.length === 0) {
-      // Include fallback mocks alongside local additions
-      mockCollections.forEach((r) => map.set(r.id, r));
-    }
-
-    // 2. Add Firestore records
+    // 1. Add Firestore real records
     firestoreRecords.forEach((r) => map.set(r.id, r));
 
-    // 3. Add Custom Local records (highest priority)
+    // 2. Add Custom Local records
+    const local = loadCustomLocalRecords();
     local.forEach((r) => map.set(r.id, r));
 
     return Array.from(map.values());
@@ -295,40 +287,6 @@ export default function CollectionRecordsPage() {
     }
   };
 
-  // Seed sample records to Firestore
-  const handleSeedSamplesToFirestore = async () => {
-    setIsLoading(true);
-    try {
-      await ensureAnonymousAuth();
-      const db = getFirebaseFirestore();
-      const samplesToSeed = mockCollections.slice(0, 5);
-
-      for (const s of samplesToSeed) {
-        await setDoc(doc(db, 'collectionRecords', s.id), {
-          recordId: s.id,
-          userUid: s.userId,
-          senderAddress: s.sender,
-          recipientAddress: s.recipient,
-          chainId: 11155111,
-          chain: 'Sepolia',
-          tokenAddress: s.token,
-          amountBaseUnits: s.amount,
-          transactionHash: s.txHash,
-          confirmationCount: s.confirmations,
-          status: s.status,
-          blockNumber: s.blockNumber,
-          createdAt: serverTimestamp(),
-        }, { merge: true });
-      }
-
-      setSuccessMsg('✓ 5 Audited Sweep records successfully seeded to Firestore!');
-      setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (err: any) {
-      console.error('Failed to seed records to Firestore:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSearch = () => {
     setAppliedFilters({
@@ -403,14 +361,6 @@ export default function CollectionRecordsPage() {
             >
               <Plus className="w-3.5 h-3.5" />
               Record Sweep
-            </button>
-            <button
-              onClick={handleSeedSamplesToFirestore}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-all"
-              title="Populate 5 sample audited sweep transactions into Firestore"
-            >
-              <Database className="w-3.5 h-3.5" />
-              Seed to Cloud
             </button>
             <ColumnVisibilityMenu
               columns={allColumns}

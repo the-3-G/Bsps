@@ -11,7 +11,6 @@ import {
 import { getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { collection, doc, getDocs, getDoc, query, limit, QueryDocumentSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { mockUsers } from '../mocks/db';
 
 async function callCallableWithTimeout<T, R>(fnName: string, data?: T, timeoutMs = 3000): Promise<R> {
   const isSparkUat = process.env.NEXT_PUBLIC_SPARK_UAT_MODE === 'true';
@@ -123,27 +122,6 @@ export class FirebaseUserRepository implements IUserRepository {
       }
 
       const cleanList = userList.filter((u) => !isHiddenUser(u));
-      if (cleanList.length === 0) {
-        return mockUsers
-          .filter((u) => !isHiddenUser(u))
-          .map((u) => ({
-            uid: u.id,
-            walletAddress: u.walletAddress,
-            walletAddressLowercase: u.walletAddress.toLowerCase(),
-            username: u.username,
-            handle: u.handle,
-            invitationCode: u.inviteCode,
-            referredByUid: undefined,
-            status: u.status,
-            authorizationStatus: 'authorized',
-            collectionStatus: u.collectionStatus,
-            createdAt: u.createdAt,
-            updatedAt: u.createdAt,
-            lastLoginAt: u.createdAt,
-            balanceUsdt: '5,000.00 USDT',
-            balanceEth: '0.0000 ETH',
-          } as unknown as DbUser));
-      }
       return cleanList;
     }
   }

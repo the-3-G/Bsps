@@ -1,0 +1,8 @@
+.next
+node_modules
+.git
+.turbo
+*.log
+scratch*
+apps/admin/.next
+apps/dapp/.next
