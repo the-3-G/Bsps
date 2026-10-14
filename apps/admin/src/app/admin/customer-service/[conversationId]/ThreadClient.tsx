@@ -117,6 +117,51 @@ export function ThreadClient() {
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      for (let i = 0; i < clipboardData.files.length; i++) {
+        const file = clipboardData.files[i];
+        if (file.type.startsWith('image/')) {
+          e.preventDefault();
+          if (file.size > 15 * 1024 * 1024) {
+            setErrorMessage('Pasted image exceeds 15MB limit.');
+            return;
+          }
+          setSelectedFile(file);
+          const url = URL.createObjectURL(file);
+          setFilePreviewUrl(url);
+          setErrorMessage(null);
+          return;
+        }
+      }
+    }
+
+    const items = clipboardData.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            if (blob.size > 15 * 1024 * 1024) {
+              setErrorMessage('Pasted image exceeds 15MB limit.');
+              return;
+            }
+            setSelectedFile(blob);
+            const url = URL.createObjectURL(blob);
+            setFilePreviewUrl(url);
+            setErrorMessage(null);
+            return;
+          }
+        }
+      }
+    }
+  };
+
   // Helper to extract Ethereum, Tron, or Crypto addresses from message text
   const extractAddresses = (text: string): string[] => {
     if (!text) return [];
@@ -1062,6 +1107,7 @@ Thank you for choosing BSP Smart Contract platform!`
                   placeholder="Type official support reply (Press Shift+Enter for new paragraph, Enter to send)..."
                   value={replyText}
                   onChange={handleInputChange}
+                  onPaste={handlePaste}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();

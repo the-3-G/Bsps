@@ -16,6 +16,7 @@ import {
   FileText,
   Maximize2,
   ExternalLink,
+  Clipboard,
 } from 'lucide-react';
 import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -55,16 +56,46 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
-  // Attachment and Lightbox states
+  // Attachment, Input, and Lightbox states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
+
+  // Robust universal clipboard copy helper (supports mobile WebViews and non-secure contexts)
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    if (!text) return false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '-9999px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return success;
+    } catch (e) {
+      console.warn('Clipboard copy fallback error:', e);
+      return false;
+    }
+  };
 
   // Helper to extract Ethereum, Tron, or Crypto addresses from message text
   const extractAddresses = (text: string): string[] => {
@@ -81,18 +112,124 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     return text.replace(/copy\[([^\]]+)\]/gi, '$1');
   };
 
-  const handleCopyText = (text: string, id: string) => {
+  const handleCopyText = async (text: string, id: string) => {
     if (!text) return;
-    navigator.clipboard.writeText(formatMessageText(text));
-    setCopiedMsgId(id);
-    setTimeout(() => setCopiedMsgId(null), 2500);
+    const ok = await copyToClipboard(formatMessageText(text));
+    if (ok) {
+      setCopiedMsgId(id);
+      setTimeout(() => setCopiedMsgId(null), 2500);
+    }
   };
 
-  const handleCopyAddress = (addr: string) => {
+  const handleCopyAddress = async (addr: string) => {
     if (!addr) return;
-    navigator.clipboard.writeText(addr.trim());
-    setCopiedAddress(addr);
-    setTimeout(() => setCopiedAddress(null), 2500);
+    const ok = await copyToClipboard(addr.trim());
+    if (ok) {
+      setCopiedAddress(addr);
+      setTimeout(() => setCopiedAddress(null), 2500);
+    }
+  };
+
+  const pingTypingIndicator = () => {
+    if (!conversationId) return;
+    const now = Date.now();
+    if (now - lastTypingTimeRef.current > 3000) {
+      lastTypingTimeRef.current = now;
+      const db = getFirebaseFirestore();
+      const convDocRef = doc(db, 'chatConversations', conversationId);
+      updateDoc(convDocRef, { guestTyping: true }).catch(() => {});
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        updateDoc(convDocRef, { guestTyping: false }).catch(() => {});
+      }, 5000);
+    }
+  };
+
+  // Clipboard Paste handler: handles both image screenshots and text reliably
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement | HTMLDivElement>) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    // 1. Check if user pasted an image file from clipboard (e.g. screenshot via Ctrl+V or mobile)
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      for (let i = 0; i < clipboardData.files.length; i++) {
+        const file = clipboardData.files[i];
+        if (file.type.startsWith('image/')) {
+          e.preventDefault();
+          if (file.size > 15 * 1024 * 1024) {
+            setErrorMessage('Pasted image exceeds 15MB limit.');
+            return;
+          }
+          setSelectedFile(file);
+          const url = URL.createObjectURL(file);
+          setFilePreviewUrl(url);
+          setErrorMessage(null);
+          return;
+        }
+      }
+    }
+
+    // 2. Also check clipboard items for image blob
+    const items = clipboardData.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            if (blob.size > 15 * 1024 * 1024) {
+              setErrorMessage('Pasted image exceeds 15MB limit.');
+              return;
+            }
+            setSelectedFile(blob);
+            const url = URL.createObjectURL(blob);
+            setFilePreviewUrl(url);
+            setErrorMessage(null);
+            return;
+          }
+        }
+      }
+    }
+
+    // 3. Robust Text Paste for Mobile WebViews & Desktop:
+    const pastedText = clipboardData.getData('text/plain') || clipboardData.getData('text');
+    if (pastedText) {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      const start = textarea?.selectionStart ?? inputText.length;
+      const end = textarea?.selectionEnd ?? inputText.length;
+      const updatedText = inputText.substring(0, start) + pastedText + inputText.substring(end);
+      setInputText(updatedText);
+
+      pingTypingIndicator();
+
+      setTimeout(() => {
+        if (textarea) {
+          textarea.focus();
+          textarea.selectionStart = textarea.selectionEnd = start + pastedText.length;
+        }
+      }, 0);
+    }
+  };
+
+  // Quick Paste button: triggers native clipboard readText or focuses for mobile paste
+  const handleQuickPaste = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          setInputText((prev) => (prev ? `${prev} ${text}` : text));
+          pingTypingIndicator();
+          textareaRef.current?.focus();
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Quick paste readText error:', err);
+    }
+    textareaRef.current?.focus();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -354,20 +491,7 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   // Handle typing indicator
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInputText(e.target.value);
-    if (!conversationId) return;
-
-    const now = Date.now();
-    if (now - lastTypingTimeRef.current > 3000) {
-      lastTypingTimeRef.current = now;
-      const db = getFirebaseFirestore();
-      const convDocRef = doc(db, 'chatConversations', conversationId);
-      updateDoc(convDocRef, { guestTyping: true }).catch(() => {});
-
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        updateDoc(convDocRef, { guestTyping: false }).catch(() => {});
-      }, 5000);
-    }
+    pingTypingIndicator();
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -472,8 +596,11 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-55 flex justify-center bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-slate-950 flex flex-col h-full border-x border-slate-800 shadow-2xl relative">
+    <div
+      className="fixed inset-0 z-[55] flex justify-center bg-black/80 backdrop-blur-sm touch-manipulation"
+      onPaste={handlePaste}
+    >
+      <div className="w-full max-w-md bg-slate-950 flex flex-col h-[100dvh] max-h-[100dvh] border-x border-slate-800 shadow-2xl relative overscroll-contain">
         {/* Chat Header */}
         <div className="flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800">
           <div className="flex items-center gap-3">
@@ -750,11 +877,22 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
             >
               <ImageIcon className="w-4 h-4" />
             </button>
+            <button
+              type="button"
+              onClick={handleQuickPaste}
+              disabled={isCreating || isUploading || status === 'blocked'}
+              className="p-2.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition-all self-end shrink-0 disabled:opacity-40"
+              title="Paste from clipboard"
+            >
+              <Clipboard className="w-4 h-4" />
+            </button>
             <textarea
+              ref={textareaRef}
               rows={1}
               placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message (Shift+Enter for new line)..."}
               value={inputText}
               onChange={handleInputChange}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -762,7 +900,8 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                 }
               }}
               disabled={isCreating || isUploading || status === 'blocked'}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
+              style={{ fontSize: '16px' }}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[16px] sm:text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
             />
             <button
               type="submit"
