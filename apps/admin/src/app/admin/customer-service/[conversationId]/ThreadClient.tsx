@@ -2,12 +2,37 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { PageHeader, StatusBadge } from '../../../../components/ui/Reusables';
-import { Headset, Send, ArrowLeft, UserCheck, Lock, ShieldAlert, CheckCircle, Copy, Check, Sparkles, Tag, StickyNote, Search, Zap, Link2, ExternalLink, ShieldCheck } from 'lucide-react';
+import {
+  Headset,
+  Send,
+  ArrowLeft,
+  UserCheck,
+  Lock,
+  ShieldAlert,
+  CheckCircle,
+  Copy,
+  Check,
+  Sparkles,
+  Tag,
+  StickyNote,
+  Search,
+  Zap,
+  Link2,
+  ExternalLink,
+  ShieldCheck,
+  Paperclip,
+  Image as ImageIcon,
+  FileText,
+  Maximize2,
+  Loader2,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getFirebaseFirestore, getFirebaseFunctions, getFirebaseAuth } from '@bspc/firebase';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, setDoc, addDoc, serverTimestamp, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, setDoc, addDoc, serverTimestamp, where, getDocs, Timestamp, increment } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { uploadToCloudinary, formatFileSize } from '../../../../utils/cloudinary';
 
 interface ThreadMessage {
   id: string;
@@ -15,6 +40,8 @@ interface ThreadMessage {
   senderName: string;
   text: string;
   timestamp: string;
+  messageType?: 'text' | 'image' | 'file' | 'system';
+  attachmentUrl?: string;
 }
 
 interface ConvDetails {
@@ -52,6 +79,43 @@ export function ThreadClient() {
   const [showWalletInput, setShowWalletInput] = useState(false);
   const [copiedMsgAddress, setCopiedMsgAddress] = useState<string | null>(null);
   const [copiedThreadMsgId, setCopiedThreadMsgId] = useState<string | null>(null);
+
+  // Attachment and Lightbox states
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMessage('Attachment size exceeds 15MB limit.');
+      return;
+    }
+
+    setSelectedFile(file);
+    if (file.type.startsWith('image/')) {
+      const url = URL.createObjectURL(file);
+      setFilePreviewUrl(url);
+    } else {
+      setFilePreviewUrl(null);
+    }
+    setErrorMessage(null);
+  };
+
+  const handleRemoveSelectedFile = () => {
+    if (filePreviewUrl) {
+      URL.revokeObjectURL(filePreviewUrl);
+    }
+    setSelectedFile(null);
+    setFilePreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Helper to extract Ethereum, Tron, or Crypto addresses from message text
   const extractAddresses = (text: string): string[] => {
@@ -245,6 +309,8 @@ export function ThreadClient() {
             senderType: data.senderType || 'guest',
             senderName: sName,
             text: data.text || '',
+            messageType: data.messageType || (data.attachmentUrl ? 'image' : 'text'),
+            attachmentUrl: data.attachmentUrl || undefined,
             timestamp: data.createdAt?.toDate
               ? data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : 'Just now',
@@ -476,10 +542,12 @@ export function ThreadClient() {
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanText = replyText.trim();
-    if (!cleanText) return;
+    if (!cleanText && !selectedFile) return;
 
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
     if (useMock) {
+      const previewUrl = filePreviewUrl;
+      const uploadedType = selectedFile?.type.startsWith('image/') ? 'image' : (selectedFile ? 'file' : 'text');
       setMessages((prev) => [
         ...prev,
         {
@@ -487,14 +555,37 @@ export function ThreadClient() {
           senderType: 'agent',
           senderName: 'Current Support Agent',
           text: cleanText,
+          messageType: uploadedType,
+          attachmentUrl: previewUrl || undefined,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
       setReplyText('');
+      handleRemoveSelectedFile();
       return;
     }
 
+    let uploadedUrl: string | undefined = undefined;
+    let uploadedType: 'text' | 'image' | 'file' = 'text';
+
+    if (selectedFile) {
+      try {
+        setIsUploading(true);
+        const res = await uploadToCloudinary(selectedFile);
+        uploadedUrl = res.secureUrl;
+        uploadedType = selectedFile.type.startsWith('image/') ? 'image' : 'file';
+      } catch (uploadErr: any) {
+        console.error('Agent attachment upload failed:', uploadErr);
+        setErrorMessage(uploadErr?.message || 'Failed to upload attachment.');
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
     setReplyText('');
+    handleRemoveSelectedFile();
     setErrorMessage(null);
 
     // Cancel typing indicator
@@ -509,16 +600,23 @@ export function ThreadClient() {
         const auth = getFirebaseAuth();
         const agentUid = auth.currentUser?.uid || 'support-agent';
         const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
-        await addDoc(msgsRef, {
+        const msgDoc: Record<string, any> = {
           senderType: 'agent',
           senderUid: agentUid,
-          messageType: 'text',
+          messageType: uploadedType,
           text: cleanText,
           createdAt: serverTimestamp(),
-        });
+        };
+        if (uploadedUrl) {
+          msgDoc.attachmentUrl = uploadedUrl;
+        }
+        await addDoc(msgsRef, msgDoc);
+
+        const previewText = cleanText || (uploadedType === 'image' ? '📷 [Image]' : '📎 [Attachment]');
         await updateDoc(convDocRef, {
           status: 'active',
-          userUnreadCount: 1,
+          userUnreadCount: increment(1),
+          lastMessagePreview: previewText.slice(0, 100),
           lastMessageAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -531,14 +629,15 @@ export function ThreadClient() {
 
     try {
       const functions = getFirebaseFunctions();
-      const sendMsgFn = httpsCallable<{ conversationId: string; text: string; messageType: string }, { messageId: string }>(
+      const sendMsgFn = httpsCallable<{ conversationId: string; text: string; messageType: string; attachmentUrl?: string }, { messageId: string }>(
         functions,
         'sendAgentMessage'
       );
       await sendMsgFn({
         conversationId,
         text: cleanText,
-        messageType: 'text',
+        messageType: uploadedType,
+        ...(uploadedUrl ? { attachmentUrl: uploadedUrl } : {}),
       });
     } catch (err: any) {
       console.warn('Cloud Function reply unavailable. Falling back to direct Firestore:', err);
@@ -546,16 +645,23 @@ export function ThreadClient() {
         const auth = getFirebaseAuth();
         const agentUid = auth.currentUser?.uid || 'support-agent';
         const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
-        await addDoc(msgsRef, {
+        const msgDoc: Record<string, any> = {
           senderType: 'agent',
           senderUid: agentUid,
-          messageType: 'text',
+          messageType: uploadedType,
           text: cleanText,
           createdAt: serverTimestamp(),
-        });
+        };
+        if (uploadedUrl) {
+          msgDoc.attachmentUrl = uploadedUrl;
+        }
+        await addDoc(msgsRef, msgDoc);
+
+        const previewText = cleanText || (uploadedType === 'image' ? '📷 [Image]' : '📎 [Attachment]');
         await updateDoc(convDocRef, {
           status: 'active',
-          userUnreadCount: 1,
+          userUnreadCount: increment(1),
+          lastMessagePreview: previewText.slice(0, 100),
           lastMessageAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -724,7 +830,47 @@ export function ThreadClient() {
                         : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none'
                     }`}
                   >
-                    <div>{formatMessageText(m.text)}</div>
+                    {/* Render Image or File Attachment */}
+                    {m.attachmentUrl && (
+                      <div className="mb-2">
+                        {m.messageType === 'file' ? (
+                          <a
+                            href={m.attachmentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`p-2 rounded-lg flex items-center gap-2 border text-xs font-sans transition-colors ${
+                              isAgent
+                                ? 'bg-teal-800/70 border-teal-600/70 text-white hover:bg-teal-800'
+                                : 'bg-gray-100 border-gray-200 text-gray-800 hover:bg-gray-200'
+                            }`}
+                          >
+                            <FileText className={`w-4 h-4 shrink-0 ${isAgent ? 'text-teal-200' : 'text-teal-600'}`} />
+                            <span className="truncate flex-1 font-mono text-[11px]">Attachment File</span>
+                            <ExternalLink className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                          </a>
+                        ) : (
+                          <div className="relative rounded-lg overflow-hidden group/img border border-black/10 bg-black/5">
+                            <img
+                              src={m.attachmentUrl}
+                              alt="Chat Attachment"
+                              className="max-h-60 w-auto rounded-lg object-contain cursor-zoom-in hover:opacity-95 transition-all shadow-sm"
+                              onClick={() => setLightboxUrl(m.attachmentUrl!)}
+                              loading="lazy"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setLightboxUrl(m.attachmentUrl!)}
+                              className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm shadow"
+                              title="Zoom Image"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {m.text && <div>{formatMessageText(m.text)}</div>}
 
                     {/* Detected Crypto / Wallet Address Copy Widget */}
                     {detectedAddresses.length > 0 && (
@@ -857,8 +1003,60 @@ Thank you for choosing BSP Smart Contract platform!`
               </button>
             </div>
 
-            <form onSubmit={handleSendReply} className="space-y-1.5">
+            <form onSubmit={handleSendReply} className="space-y-2">
+              {/* Staged File Preview */}
+              {selectedFile && (
+                <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between gap-3 shadow-inner">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {filePreviewUrl ? (
+                      <img
+                        src={filePreviewUrl}
+                        alt="Preview"
+                        className="w-10 h-10 rounded-md object-cover border border-gray-300 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-md bg-gray-200 border border-gray-300 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-teal-600" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold text-gray-800 truncate max-w-[220px]">
+                        {selectedFile.name}
+                      </div>
+                      <div className="text-[10px] text-gray-500 font-mono">
+                        {formatFileSize(selectedFile.size)}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveSelectedFile}
+                    disabled={isUploading}
+                    className="p-1 hover:bg-gray-200 text-gray-500 hover:text-gray-800 rounded transition-colors"
+                    title="Remove attachment"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2 items-end">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || convDetails?.status === 'blocked'}
+                  className="p-2.5 text-gray-500 hover:text-teal-600 hover:bg-gray-100 rounded-lg transition-all self-end shrink-0 disabled:opacity-40 border border-gray-300"
+                  title="Attach image (Cloudinary)"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </button>
                 <textarea
                   rows={3}
                   placeholder="Type official support reply (Press Shift+Enter for new paragraph, Enter to send)..."
@@ -870,15 +1068,20 @@ Thank you for choosing BSP Smart Contract platform!`
                       handleSendReply(e);
                     }
                   }}
-                  disabled={convDetails?.status === 'blocked'}
+                  disabled={isUploading || convDetails?.status === 'blocked'}
                   className="flex-1 border border-gray-300 rounded-lg p-2.5 text-xs text-gray-800 focus:outline-none focus:border-teal-primary disabled:opacity-40 resize-y font-sans leading-relaxed min-h-[60px] max-h-[180px]"
                 />
                 <button
                   type="submit"
-                  disabled={!replyText.trim() || convDetails?.status === 'blocked'}
+                  disabled={(!replyText.trim() && !selectedFile) || isUploading || convDetails?.status === 'blocked'}
                   className="bg-teal-primary hover:bg-teal-hover disabled:opacity-40 text-white font-bold text-xs px-4 py-3 rounded-lg inline-flex items-center gap-1.5 transition-colors h-fit self-end shadow-sm"
                 >
-                  <Send className="w-3.5 h-3.5" /> Send
+                  {isUploading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isUploading ? 'Uploading...' : 'Send'}</span>
                 </button>
               </div>
               <div className="flex justify-between items-center text-[10px] text-gray-400 px-1">
@@ -1157,6 +1360,39 @@ Thank you for choosing BSP Smart Contract platform!`
           </div>
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="w-full max-w-4xl flex justify-between items-center mb-3 px-2" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={lightboxUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-lg transition-colors border border-gray-700"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Open Original
+            </a>
+            <button
+              type="button"
+              onClick={() => setLightboxUrl(null)}
+              className="p-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors border border-gray-700"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="max-w-4xl max-h-[85vh] flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={lightboxUrl}
+              alt="Full View"
+              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-gray-800"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

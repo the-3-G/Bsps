@@ -574,29 +574,35 @@ export const sendAgentMessage = onCall(
       throw new HttpsError('invalid-argument', 'Invalid message payload.');
     }
 
-    const { conversationId, text, messageType } = parseResult.data;
+    const { conversationId, text, messageType, attachmentUrl } = parseResult.data;
     const convRef = db.collection('chatConversations').doc(conversationId);
     const now = admin.firestore.Timestamp.now();
 
-    const sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const sanitizedText = (text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const effectiveType = messageType || (attachmentUrl ? 'image' : 'text');
 
     const msgRef = convRef.collection('messages').doc();
-    await msgRef.set({
+    const msgData: Record<string, any> = {
       messageId: msgRef.id,
       conversationId,
       senderType: 'agent',
       senderUid: agentUid,
       text: sanitizedText,
-      messageType,
+      messageType: effectiveType,
       createdAt: now,
       deliveredAt: now,
-    });
+    };
+    if (attachmentUrl) {
+      msgData.attachmentUrl = attachmentUrl;
+    }
+    await msgRef.set(msgData);
 
+    const preview = sanitizedText.slice(0, 100) || (effectiveType === 'image' ? '📷 [Image]' : '📎 [Attachment]');
     await convRef.update({
       status: 'active',
       assignedAgentUid: agentUid,
       lastMessageAt: now,
-      lastMessagePreview: sanitizedText.slice(0, 100),
+      lastMessagePreview: preview,
       userUnreadCount: admin.firestore.FieldValue.increment(1),
       updatedAt: now,
     });

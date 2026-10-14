@@ -44,8 +44,9 @@ export const AssignSupportAgentSchema = z.object({
 
 export const SendAgentMessageSchema = z.object({
   conversationId: z.string().min(1, 'Conversation ID is required'),
-  text: z.string().min(1, 'Message cannot be empty').max(2000),
+  text: z.string().max(2000).default(''),
   messageType: z.enum(['text', 'image', 'file', 'system']).default('text'),
+  attachmentUrl: z.string().url().optional(),
 });
 
 export const CloseSupportConversationSchema = z.object({

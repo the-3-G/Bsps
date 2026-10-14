@@ -1,11 +1,27 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Headset, Shield, Circle, CheckCheck, Loader2, Copy, Check } from 'lucide-react';
+import {
+  X,
+  Send,
+  Headset,
+  Shield,
+  Circle,
+  CheckCheck,
+  Loader2,
+  Copy,
+  Check,
+  Paperclip,
+  Image as ImageIcon,
+  FileText,
+  Maximize2,
+  ExternalLink,
+} from 'lucide-react';
 import { getFirebaseAuth, getFirebaseFirestore, getFirebaseFunctions } from '@bspc/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { useWeb3 } from '../context/Web3Context';
+import { uploadToCloudinary, formatFileSize } from '../utils/cloudinary';
 
 import { httpsCallable } from 'firebase/functions';
 
@@ -15,6 +31,8 @@ interface ChatMessage {
   senderUid: string;
   text: string;
   timestamp: string;
+  messageType?: 'text' | 'image' | 'file' | 'system';
+  attachmentUrl?: string;
 }
 
 interface ChatDrawerProps {
@@ -36,6 +54,13 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   const [userUid, setUserUid] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+
+  // Attachment and Lightbox states
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -68,6 +93,36 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     navigator.clipboard.writeText(addr.trim());
     setCopiedAddress(addr);
     setTimeout(() => setCopiedAddress(null), 2500);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMessage('Attachment size exceeds 15MB limit.');
+      return;
+    }
+
+    setSelectedFile(file);
+    if (file.type.startsWith('image/')) {
+      const url = URL.createObjectURL(file);
+      setFilePreviewUrl(url);
+    } else {
+      setFilePreviewUrl(null);
+    }
+    setErrorMessage(null);
+  };
+
+  const handleRemoveSelectedFile = () => {
+    if (filePreviewUrl) {
+      URL.revokeObjectURL(filePreviewUrl);
+    }
+    setSelectedFile(null);
+    setFilePreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   useEffect(() => {
@@ -280,6 +335,8 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
           senderType: data.senderType || 'guest',
           senderUid: data.senderUid || '',
           text: data.text || '',
+          messageType: data.messageType || (data.attachmentUrl ? 'image' : 'text'),
+          attachmentUrl: data.attachmentUrl || undefined,
           timestamp: data.createdAt?.toDate
             ? data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -314,10 +371,9 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
-
     e.preventDefault();
     const cleanText = inputText.trim();
-    if (!cleanText) return;
+    if (!cleanText && !selectedFile) return;
 
     let activeConvId = conversationId;
     if (!activeConvId) {
@@ -334,12 +390,32 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     }
 
     // Client-side abuse checks
-    if (cleanText.length > 1000) {
-      setErrorMessage('Message exceeds the maximum limit of 1000 characters.');
+    if (cleanText.length > 2000) {
+      setErrorMessage('Message exceeds the maximum limit of 2000 characters.');
       return;
     }
 
+    let uploadedUrl: string | undefined = undefined;
+    let uploadedType: 'text' | 'image' | 'file' = 'text';
+
+    if (selectedFile) {
+      try {
+        setIsUploading(true);
+        const res = await uploadToCloudinary(selectedFile);
+        uploadedUrl = res.secureUrl;
+        uploadedType = selectedFile.type.startsWith('image/') ? 'image' : 'file';
+      } catch (uploadErr: any) {
+        console.error('Attachment upload failed:', uploadErr);
+        setErrorMessage(uploadErr?.message || 'Attachment upload failed. Please try again.');
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
     setInputText('');
+    handleRemoveSelectedFile();
     setErrorMessage(null);
 
     // Cancel typing indicator
@@ -353,21 +429,26 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
       const senderUidToSave = address ? address.toLowerCase() : (userUid || 'unknown');
       const senderNameToSave = address ? `User_${address.slice(-4).toUpperCase()}` : guestLabel;
 
-      // Direct Firestore message write
-      await addDoc(msgsRef, {
+      const msgDocData: Record<string, any> = {
         conversationId: activeConvId,
         senderType: address ? 'user' : 'guest',
         senderUid: senderUidToSave,
         senderName: senderNameToSave,
         senderWalletAddress: address || null,
-        messageType: 'text',
+        messageType: uploadedType,
         text: cleanText,
         createdAt: serverTimestamp(),
-      });
+      };
+      if (uploadedUrl) {
+        msgDocData.attachmentUrl = uploadedUrl;
+      }
+
+      await addDoc(msgsRef, msgDocData);
 
       // Update last message preview, reactivate status if closed, & increment agent unread counter
+      const previewText = cleanText || (uploadedType === 'image' ? '📷 [Image]' : '📎 [Attachment]');
       const convUpdates: Record<string, any> = {
-        lastMessagePreview: cleanText.slice(0, 100),
+        lastMessagePreview: previewText.slice(0, 100),
         lastMessageAt: serverTimestamp(),
         agentUnreadCount: increment(1),
         updatedAt: serverTimestamp(),
@@ -483,7 +564,47 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                           : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
                       }`}
                     >
-                      <div>{formatMessageText(msg.text)}</div>
+                      {/* Render Image or File Attachment */}
+                      {msg.attachmentUrl && (
+                        <div className="mb-2">
+                          {msg.messageType === 'file' ? (
+                            <a
+                              href={msg.attachmentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`p-2.5 rounded-xl flex items-center gap-2 border text-xs font-sans transition-colors ${
+                                isGuest
+                                  ? 'bg-amber-600/30 border-amber-600/40 text-slate-950 hover:bg-amber-600/40'
+                                  : 'bg-slate-950/80 border-slate-700/80 text-slate-200 hover:bg-slate-950'
+                              }`}
+                            >
+                              <FileText className={`w-4 h-4 shrink-0 ${isGuest ? 'text-slate-950' : 'text-amber-400'}`} />
+                              <span className="truncate flex-1 font-mono text-[11px]">Attachment File</span>
+                              <ExternalLink className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                            </a>
+                          ) : (
+                            <div className="relative rounded-xl overflow-hidden group/img border border-black/10 bg-black/20">
+                              <img
+                                src={msg.attachmentUrl}
+                                alt="Chat Attachment"
+                                className="max-h-60 w-auto rounded-xl object-contain cursor-zoom-in hover:opacity-95 transition-all shadow-sm"
+                                onClick={() => setLightboxUrl(msg.attachmentUrl!)}
+                                loading="lazy"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setLightboxUrl(msg.attachmentUrl!)}
+                                className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm shadow"
+                                title="Zoom Image"
+                              >
+                                <Maximize2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {msg.text && <div>{formatMessageText(msg.text)}</div>}
 
                       {/* Detected Crypto / Wallet Address Copy Widget */}
                       {detectedAddresses.length > 0 && (
@@ -535,22 +656,24 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
                     <div className="flex items-center gap-2 mt-1 px-1 text-[9px] text-slate-500 font-mono">
                       <span>{msg.timestamp}</span>
                       {isGuest && <CheckCheck className="w-3 h-3 text-amber-500" />}
-                      <button
-                        type="button"
-                        onClick={() => handleCopyText(msg.text, msg.id)}
-                        className="hover:text-slate-300 text-slate-500 inline-flex items-center gap-0.5 transition-colors"
-                        title="Copy message text"
-                      >
-                        {copiedMsgId === msg.id ? (
-                          <span className="text-emerald-400 font-bold inline-flex items-center gap-0.5">
-                            <Check className="w-2.5 h-2.5" /> Copied
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-0.5">
-                            <Copy className="w-2.5 h-2.5" /> Copy
-                          </span>
-                        )}
-                      </button>
+                      {msg.text && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(msg.text, msg.id)}
+                          className="hover:text-slate-300 text-slate-500 inline-flex items-center gap-0.5 transition-colors"
+                          title="Copy message text"
+                        >
+                          {copiedMsgId === msg.id ? (
+                            <span className="text-emerald-400 font-bold inline-flex items-center gap-0.5">
+                              <Check className="w-2.5 h-2.5" /> Copied
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Copy className="w-2.5 h-2.5" /> Copy
+                            </span>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -573,29 +696,121 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
         </div>
 
         {/* Input Bar */}
-        <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2 items-end">
-          <textarea
-            rows={1}
-            placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message (Shift+Enter for new line)..."}
-            value={inputText}
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(e);
-              }
-            }}
-            disabled={isCreating || status === 'blocked'}
-            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
-          />
-          <button
-            type="submit"
-            disabled={!inputText.trim() || isCreating || status === 'blocked'}
-            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold p-2.5 rounded-xl transition-all self-end shrink-0"
+        <div className="p-3 bg-slate-900 border-t border-slate-800">
+          {/* Staged File Preview */}
+          {selectedFile && (
+            <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl mb-2 flex items-center justify-between gap-3 shadow-inner">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {filePreviewUrl ? (
+                  <img
+                    src={filePreviewUrl}
+                    alt="Preview"
+                    className="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5 text-amber-400" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-slate-200 truncate max-w-[200px]">
+                    {selectedFile.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    {formatFileSize(selectedFile.size)}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveSelectedFile}
+                disabled={isUploading}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-colors"
+                title="Remove attachment"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isCreating || isUploading || status === 'blocked'}
+              className="p-2.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition-all self-end shrink-0 disabled:opacity-40"
+              title="Attach image (Cloudinary)"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+            <textarea
+              rows={1}
+              placeholder={status === 'blocked' ? "Conversation is blocked" : "Type message (Shift+Enter for new line)..."}
+              value={inputText}
+              onChange={handleInputChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(e);
+                }
+              }}
+              disabled={isCreating || isUploading || status === 'blocked'}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500/60 disabled:opacity-40 resize-none max-h-24 font-sans leading-relaxed"
+            />
+            <button
+              type="submit"
+              disabled={(!inputText.trim() && !selectedFile) || isCreating || isUploading || status === 'blocked'}
+              className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold p-2.5 rounded-xl transition-all self-end shrink-0"
+              title={isUploading ? "Uploading..." : "Send"}
+            >
+              {isUploading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* Lightbox Modal */}
+        {lightboxUrl && (
+          <div
+            className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-150"
+            onClick={() => setLightboxUrl(null)}
           >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
+            <div className="w-full max-w-4xl flex justify-between items-center mb-3 px-2" onClick={(e) => e.stopPropagation()}>
+              <a
+                href={lightboxUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors border border-slate-700"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open Original
+              </a>
+              <button
+                type="button"
+                onClick={() => setLightboxUrl(null)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="max-w-4xl max-h-[85vh] flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={lightboxUrl}
+                alt="Full View"
+                className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-slate-800"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
