@@ -19,7 +19,8 @@
     "@bspc/firebase": "workspace:*",
     "@bspc/web3": "workspace:*",
     "@bspc/ui": "workspace:*",
-    "firebase": "^10.14.1"
+    "firebase": "^10.14.1",
+    "viem": "^2.19.4"
   },
   "devDependencies": {
     "@alloc/quick-lru": "^5.2.0",

