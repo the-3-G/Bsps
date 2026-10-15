@@ -22,25 +22,16 @@ import { MockCollectionRecord } from '../../../mocks/db';
 import { Plus, Check, X, Sparkles, RotateCw } from 'lucide-react';
 import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { collection, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { LiveSweepModal, SweepUserOption } from '../../../components/LiveSweepModal';
 
 export default function CollectionRecordsPage() {
   const [records, setRecords] = useState<MockCollectionRecord[]>([]);
+  const [usersList, setUsersList] = useState<SweepUserOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Modal State for Recording a Sweep
+  // Modal State for Recording/Executing a Sweep
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [formId, setFormId] = useState('');
-  const [formUserId, setFormUserId] = useState('u-1001');
-  const [formSender, setFormSender] = useState('');
-  const [formRecipient, setFormRecipient] = useState('0xd1dd0000000000000000000000000000b6107000');
-  const [formToken, setFormToken] = useState('USDC');
-  const [formAmount, setFormAmount] = useState('5,000');
-  const [formChain, setFormChain] = useState<'Sepolia' | 'Ethereum Mainnet'>('Sepolia');
-  const [formStatus, setFormStatus] = useState<'confirmed' | 'pending' | 'failed'>('confirmed');
-  const [formTxHash, setFormTxHash] = useState('');
-  const [formConfirmations, setFormConfirmations] = useState('12');
 
   // Filter States
   const [userIdFilter, setUserIdFilter] = useState('');
@@ -202,6 +193,27 @@ export default function CollectionRecordsPage() {
 
     syncInitial();
 
+    // Subscribe to users for live sweep dropdown
+    let unsubUsers = () => {};
+    ensureAnonymousAuth().then(() => {
+      const db = getFirebaseFirestore();
+      unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+        const uList: SweepUserOption[] = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            uid: d.id,
+            username: data.username || d.id,
+            walletAddress: data.walletAddress || d.id,
+            clientAlias: data.clientAlias,
+            balanceUsdt: data.balanceUsdt,
+            balanceEth: data.balanceEth,
+            authorizationStatus: data.authorizationStatus,
+          };
+        });
+        setUsersList(uList);
+      });
+    }).catch((e) => console.warn('Users sync note:', e));
+
     const handleStorageChange = () => {
       setRecords((prev) => mergeRecords(prev));
     };
@@ -209,82 +221,16 @@ export default function CollectionRecordsPage() {
 
     return () => {
       unsubFirestore();
+      unsubUsers();
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
-  const openRecordModal = () => {
-    const randomHex = Math.random().toString(16).slice(2, 10);
-    setFormId(`swp-${Date.now().toString(16).slice(-6)}`);
-    setFormUserId(`u-${Math.floor(Math.random() * 900 + 100)}`);
-    setFormSender(`0x${randomHex.padStart(40, 'a')}`);
-    setFormRecipient('0xd1dd0000000000000000000000000000b6107000');
-    setFormToken('USDC');
-    setFormAmount('5,000');
-    setFormChain('Sepolia');
-    setFormStatus('confirmed');
-    setFormTxHash(`0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`);
-    setFormConfirmations('12');
-    setIsModalOpen(true);
-  };
-
-  const handleSaveSweepRecord = async () => {
-    setIsSaving(true);
-    try {
-      const newRecord: MockCollectionRecord = {
-        id: formId.trim() || `swp-${Date.now()}`,
-        userId: formUserId.trim() || 'u-1001',
-        username: `${formSender.slice(0, 6)}...${formSender.slice(-4)}`,
-        status: formStatus,
-        sender: formSender.trim(),
-        recipient: formRecipient.trim(),
-        txHash: formTxHash.trim() || `0x${Math.random().toString(16).slice(2)}`,
-        token: formToken,
-        amount: formAmount.trim(),
-        chain: formChain,
-        blockNumber: 18000000 + Math.floor(Math.random() * 5000),
-        confirmations: parseInt(formConfirmations, 10) || 12,
-        createdAt: new Date().toISOString(),
-      };
-
-      // 1. Save to local storage for instant persistent display
-      saveCustomLocalRecord(newRecord);
-
-      // 2. Try writing to Firestore
-      try {
-        await ensureAnonymousAuth();
-        const db = getFirebaseFirestore();
-        await setDoc(doc(db, 'collectionRecords', newRecord.id), {
-          recordId: newRecord.id,
-          userUid: newRecord.userId,
-          senderAddress: newRecord.sender,
-          recipientAddress: newRecord.recipient,
-          chainId: newRecord.chain === 'Sepolia' ? 11155111 : 1,
-          chain: newRecord.chain,
-          tokenAddress: newRecord.token,
-          token: newRecord.token,
-          amountBaseUnits: newRecord.amount,
-          amount: newRecord.amount,
-          transactionHash: newRecord.txHash,
-          txHash: newRecord.txHash,
-          confirmationCount: newRecord.confirmations,
-          status: newRecord.status,
-          blockNumber: newRecord.blockNumber,
-          createdAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (fsErr) {
-        console.warn('Firestore collection record sync note:', fsErr);
-      }
-
-      setRecords((prev) => [newRecord, ...prev.filter((r) => r.id !== newRecord.id)]);
-      setSuccessMsg(`✓ Sweep transaction ${newRecord.id} recorded successfully!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
-      setIsModalOpen(false);
-    } catch (err: any) {
-      console.error('Failed to save sweep record:', err);
-    } finally {
-      setIsSaving(false);
-    }
+  const handleSweepSuccess = (newRecord: any) => {
+    saveCustomLocalRecord(newRecord);
+    setRecords((prev) => [newRecord, ...prev.filter((r) => r.id !== newRecord.id)]);
+    setSuccessMsg(`✓ Sweep transaction ${newRecord.id || newRecord.recordId} successfully recorded and executed!`);
+    setTimeout(() => setSuccessMsg(null), 5000);
   };
 
 
@@ -356,11 +302,11 @@ export default function CollectionRecordsPage() {
         actions={
           <div className="flex gap-2">
             <button
-              onClick={openRecordModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all"
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all"
             >
-              <Plus className="w-3.5 h-3.5" />
-              Record Sweep
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              ⚡ Collect / Sweep Funds
             </button>
             <ColumnVisibilityMenu
               columns={allColumns}
@@ -517,167 +463,13 @@ export default function CollectionRecordsPage() {
         />
       </div>
 
-      {/* ── RECORD SWEEP MODAL ── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-200">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-teal-700 to-teal-900 px-6 py-4 flex items-center justify-between text-white">
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-5 h-5 text-amber-300" />
-                <div>
-                  <h3 className="text-sm font-bold">Record Collection Sweep</h3>
-                  <p className="text-[11px] text-teal-100">Log audited treasury sweep transaction</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-teal-200 hover:text-white p-1 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Form */}
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Sweep Record ID</label>
-                  <input
-                    type="text"
-                    value={formId}
-                    onChange={(e) => setFormId(e.target.value)}
-                    placeholder="e.g. swp-101"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">User ID / Tag</label>
-                  <input
-                    type="text"
-                    value={formUserId}
-                    onChange={(e) => setFormUserId(e.target.value)}
-                    placeholder="e.g. u-1001"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Sender Wallet (User)</label>
-                  <input
-                    type="text"
-                    value={formSender}
-                    onChange={(e) => setFormSender(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Recipient Wallet (Treasury)</label>
-                  <input
-                    type="text"
-                    value={formRecipient}
-                    onChange={(e) => setFormRecipient(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Token</label>
-                  <select
-                    value={formToken}
-                    onChange={(e) => setFormToken(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold text-teal-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  >
-                    <option value="USDC">USDC</option>
-                    <option value="USDT">USDT</option>
-                    <option value="ETH">ETH</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Sweep Amount</label>
-                  <input
-                    type="text"
-                    value={formAmount}
-                    onChange={(e) => setFormAmount(e.target.value)}
-                    placeholder="e.g. 5,000"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-bold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Network Chain</label>
-                  <select
-                    value={formChain}
-                    onChange={(e) => setFormChain(e.target.value as any)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  >
-                    <option value="Sepolia">Sepolia Testnet</option>
-                    <option value="Ethereum Mainnet">Ethereum Mainnet</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Confirmation Status</label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as any)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  >
-                    <option value="confirmed">Confirmed</option>
-                    <option value="pending">Pending</option>
-                    <option value="failed">Failed</option>
-                  </select>
-                </div>
-
-                <div className="col-span-2">
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Transaction Hash</label>
-                  <input
-                    type="text"
-                    value={formTxHash}
-                    onChange={(e) => setFormTxHash(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Block Confirmations</label>
-                  <input
-                    type="number"
-                    value={formConfirmations}
-                    onChange={(e) => setFormConfirmations(e.target.value)}
-                    placeholder="12"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="bg-gray-50 border-t border-gray-100 px-6 py-3 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveSweepRecord}
-                disabled={isSaving}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white shadow transition-all"
-              >
-                <Check className="w-3.5 h-3.5" />
-                {isSaving ? 'Recording...' : 'Save Sweep Record'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── LIVE ON-CHAIN SWEEP & RECORD MODAL ── */}
+      <LiveSweepModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        usersList={usersList}
+        onSweepSuccess={handleSweepSuccess}
+      />
     </div>
   );
 }

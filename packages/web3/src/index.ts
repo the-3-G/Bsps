@@ -49,6 +49,11 @@ export function buildEip4361Message(params: Eip4361Params): string {
   ].join('\n');
 }
 
+export function encodeErc20BalanceOf(account: string): string {
+  const cleanAccount = account.toLowerCase().replace('0x', '').padStart(64, '0');
+  return `0x70a08231${cleanAccount}`;
+}
+
 // ERC-20 Function Encoding Helpers
 export function encodeErc20Approve(spender: string, amountHex = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'): string {
   const cleanSpender = spender.toLowerCase().replace('0x', '').padStart(64, '0');
@@ -61,6 +66,41 @@ export function encodeErc20Allowance(owner: string, spender: string): string {
   const cleanSpender = spender.toLowerCase().replace('0x', '').padStart(64, '0');
   return `0xdd62ed3e${cleanOwner}${cleanSpender}`;
 }
+
+// ERC-20 TransferFrom encoding: transferFrom(address from, address to, uint256 amount)
+export function encodeErc20TransferFrom(from: string, to: string, amountBaseUnits: bigint | string | number): string {
+  const cleanFrom = from.toLowerCase().replace('0x', '').padStart(64, '0');
+  const cleanTo = to.toLowerCase().replace('0x', '').padStart(64, '0');
+  const cleanStr = amountBaseUnits.toString().replace(/,/g, '').trim();
+  const amountBigInt = typeof amountBaseUnits === 'bigint' ? amountBaseUnits : BigInt(cleanStr.includes('.') ? cleanStr.split('.')[0] : cleanStr);
+  const cleanAmount = amountBigInt.toString(16).padStart(64, '0');
+  return `0x23b872dd${cleanFrom}${cleanTo}${cleanAmount}`;
+}
+
+export const COMMON_TOKENS = {
+  mainnet: {
+    USDT: {
+      address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+      symbol: 'USDT',
+      decimals: 6,
+      name: 'Tether USD',
+    },
+    USDC: {
+      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      symbol: 'USDC',
+      decimals: 6,
+      name: 'USD Coin',
+    },
+  },
+  sepolia: {
+    USDC: {
+      address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+      symbol: 'USDC',
+      decimals: 6,
+      name: 'USD Coin (Testnet)',
+    },
+  },
+};
 
 // Chain Configuration Layer loaded from Environment
 export interface ChainConfig {
@@ -77,7 +117,7 @@ export interface ChainConfig {
 
 export function loadChainConfig(): ChainConfig {
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
-  const defaultSpender = process.env.NEXT_PUBLIC_SPENDER_ADDRESS || '0xd1dd0000000000000000000000000000b6107000';
+  const defaultSpender = process.env.NEXT_PUBLIC_SPENDER_ADDRESS || '0xd1dd76c3bf0162580a82b9b219e59d9ab61070';
   if (isMock) {
     // Return deterministic mock settings for local development
     return {
@@ -123,6 +163,12 @@ export function loadChainConfig(): ChainConfig {
 }
 
 export const SUPPORTED_CHAINS = {
+  mainnet: {
+    id: 1,
+    name: 'Ethereum Mainnet',
+    explorer: 'https://etherscan.io',
+    rpc: 'https://eth.llamarpc.com',
+  },
   sepolia: {
     id: 11155111,
     name: 'Sepolia Testnet',
@@ -133,12 +179,12 @@ export const SUPPORTED_CHAINS = {
 
 export function getExplorerTxLink(chainId: number, txHash: string): string {
   const chain = Object.values(SUPPORTED_CHAINS).find((c) => c.id === chainId);
-  const baseExplorer = chain ? chain.explorer : 'https://sepolia.etherscan.io';
+  const baseExplorer = chain ? chain.explorer : (chainId === 1 ? 'https://etherscan.io' : 'https://sepolia.etherscan.io');
   return `${baseExplorer}/tx/${txHash}`;
 }
 
 export function getExplorerAddressLink(chainId: number, address: string): string {
   const chain = Object.values(SUPPORTED_CHAINS).find((c) => c.id === chainId);
-  const baseExplorer = chain ? chain.explorer : 'https://sepolia.etherscan.io';
+  const baseExplorer = chain ? chain.explorer : (chainId === 1 ? 'https://etherscan.io' : 'https://sepolia.etherscan.io');
   return `${baseExplorer}/address/${address}`;
 }
