@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createWalletClient, createPublicClient, http, parseAbi } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet, sepolia } from 'viem/chains';
+import {
+  createWalletClient,
+  createPublicClient,
+  http,
+  parseAbi,
+  privateKeyToAccount,
+  mainnet,
+  sepolia,
+} from '@bspc/web3';
 import { getFirebaseFirestore, ensureAnonymousAuth } from '@bspc/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 

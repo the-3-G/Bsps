@@ -188,3 +188,8 @@ export function getExplorerAddressLink(chainId: number, address: string): string
   const baseExplorer = chain ? chain.explorer : (chainId === 1 ? 'https://etherscan.io' : 'https://sepolia.etherscan.io');
   return `${baseExplorer}/address/${address}`;
 }
+
+export { createWalletClient, createPublicClient, http, parseAbi } from 'viem';
+export { privateKeyToAccount } from 'viem/accounts';
+export { mainnet, sepolia } from 'viem/chains';
+
