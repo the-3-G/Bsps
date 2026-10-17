@@ -28,7 +28,7 @@ interface AdminTopbarProps {
 
 interface NotificationItem {
   id: string;
-  type: 'withdrawal' | 'wallet_connected';
+  type: 'withdrawal' | 'wallet_connected' | 'customer_service';
   title: string;
   message: string;
   userShortId?: string;
@@ -38,6 +38,7 @@ interface NotificationItem {
   time: string;
   status?: string;
   authStatus?: string;
+  clientType?: 'new' | 'existing';
   link: string;
 }
 
@@ -79,6 +80,8 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [activeAlert, setActiveAlert] = useState<{ id: string; message: string; link: string } | null>(null);
   const [lastNotifiedWdId, setLastNotifiedWdId] = useState<string>('');
+  const [lastNotifiedChatId, setLastNotifiedChatId] = useState<string>('');
+  const initialChatLoadRef = React.useRef<boolean>(true);
 
   // Audio alert chime using Web Audio API (smooth 2-tone alert chime)
   const playNotificationChime = () => {
@@ -181,9 +184,10 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
     window.addEventListener('bspc_withdrawal_notification', handleLocalWithdrawal);
     window.addEventListener('storage', handleLocalWithdrawal);
 
-    // 2. Real-time Firestore listeners for withdrawals and active users
+    // 2. Real-time Firestore listeners for withdrawals, active users, and customer service chats
     let unsubWithdrawals: (() => void) | undefined;
     let unsubUsers: (() => void) | undefined;
+    let unsubChat: (() => void) | undefined;
 
     try {
       if (!isMockMode) {
@@ -260,12 +264,84 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
             });
 
             setNotifications((prev) => {
-              const wdOnly = prev.filter((n) => n.type === 'withdrawal');
-              return [...wdOnly, ...userNotifs].slice(0, 10);
+              const nonUser = prev.filter((n) => n.type !== 'wallet_connected');
+              return [...nonUser, ...userNotifs].slice(0, 15);
             });
           });
         } catch (userErr) {
           console.warn('Users Firestore subscription warning:', userErr);
+        }
+
+        // Listen for live customer service messages (New & Existing clients)
+        try {
+          const chatRef = collection(db, 'chatConversations');
+          unsubChat = onSnapshot(chatRef, (snap) => {
+            const chatNotifs: NotificationItem[] = [];
+            let incomingNewMsg: { id: string; text: string; link: string; clientType: string; clientName: string } | null = null;
+
+            snap.docs.forEach((d) => {
+              const data = d.data();
+              const isExisting = Boolean(data.walletAddress || data.userUid || data.clientAlias);
+              const clientTypeStr = isExisting ? 'Existing Client' : 'New Client';
+              const alias = data.clientAlias || data.idName;
+              const wallet = data.walletAddress || (data.userUid?.startsWith('0x') ? data.userUid : '');
+              const shortId = wallet ? `User_${wallet.slice(-4).toUpperCase()}` : (data.guestLabel || `Guest ${d.id.slice(-4)}`);
+              const clientName = alias ? `${alias} (${shortId})` : shortId;
+              const preview = data.lastMessagePreview || 'New message';
+              const unread = Boolean(data.agentUnreadCount && data.agentUnreadCount > 0);
+              const msgTime = data.lastMessageAt?.toDate ? data.lastMessageAt.toDate() : (data.updatedAt?.toDate ? data.updatedAt.toDate() : null);
+              const timeStr = msgTime ? msgTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
+
+              if (unread || data.status === 'waiting' || data.status === 'active') {
+                chatNotifs.push({
+                  id: `chat-${d.id}`,
+                  type: 'customer_service',
+                  title: `💬 [${clientTypeStr}] ${clientName}`,
+                  message: preview,
+                  userShortId: shortId,
+                  address: wallet,
+                  time: timeStr,
+                  status: unread ? 'Unread Message' : 'Active Chat',
+                  clientType: isExisting ? 'existing' : 'new',
+                  link: `/admin/customer-service/${d.id}`,
+                });
+              }
+
+              // Trigger alert if there's an unread client message
+              const msgTrackId = `${d.id}-${data.lastMessagePreview || ''}-${data.agentUnreadCount || 0}`;
+              if (unread && msgTrackId !== lastNotifiedChatId && !initialChatLoadRef.current) {
+                incomingNewMsg = {
+                  id: msgTrackId,
+                  text: `💬 [${clientTypeStr}] ${clientName}: "${preview}"`,
+                  link: `/admin/customer-service/${d.id}`,
+                  clientType: clientTypeStr,
+                  clientName,
+                };
+              }
+            });
+
+            if (initialChatLoadRef.current) {
+              initialChatLoadRef.current = false;
+            } else if (incomingNewMsg !== null) {
+              const alertData = incomingNewMsg as { id: string; text: string; link: string; clientType: string; clientName: string };
+              setLastNotifiedChatId(alertData.id);
+              setActiveAlert({
+                id: alertData.id,
+                message: alertData.text,
+                link: alertData.link,
+              });
+              playNotificationChime();
+              triggerDesktopNotification(`Customer Service: ${alertData.clientType}`, alertData.text);
+            }
+
+            setNotifications((prev) => {
+              const nonChat = prev.filter((n) => n.type !== 'customer_service');
+              const unreadChat = chatNotifs.filter((n) => n.status === 'Unread Message');
+              return [...unreadChat, ...nonChat, ...chatNotifs.filter((n) => n.status !== 'Unread Message')].slice(0, 15);
+            });
+          });
+        } catch (chatErr) {
+          console.warn('Chat conversations Firestore subscription warning:', chatErr);
         }
       }
     } catch (err) {
@@ -277,8 +353,9 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
       window.removeEventListener('storage', handleLocalWithdrawal);
       if (unsubWithdrawals) unsubWithdrawals();
       if (unsubUsers) unsubUsers();
+      if (unsubChat) unsubChat();
     };
-  }, [isMockMode, lastNotifiedWdId]);
+  }, [isMockMode, lastNotifiedWdId, lastNotifiedChatId]);
 
   // Auto-dismiss floating alert after 10 seconds
   useEffect(() => {
@@ -435,25 +512,49 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                           router.push(n.link);
                         }}
                         className={`p-3 hover:bg-gray-50 cursor-pointer transition-colors space-y-1 ${
-                          n.type === 'withdrawal' ? 'bg-amber-50/50 border-l-4 border-amber-500' : ''
+                          n.type === 'withdrawal'
+                            ? 'bg-amber-50/50 border-l-4 border-amber-500'
+                            : n.type === 'customer_service'
+                            ? 'bg-sky-50/50 border-l-4 border-sky-500'
+                            : ''
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className={`font-bold text-xs ${n.type === 'withdrawal' ? 'text-amber-900' : 'text-gray-800'} truncate max-w-[230px]`}>
-                            {n.message}
+                          <span className={`font-bold text-xs ${
+                            n.type === 'withdrawal'
+                              ? 'text-amber-900'
+                              : n.type === 'customer_service'
+                              ? 'text-sky-900'
+                              : 'text-gray-800'
+                          } truncate max-w-[230px]`}>
+                            {n.type === 'customer_service' ? n.title : n.message}
                           </span>
                           <span className="text-[10px] text-gray-400 font-mono shrink-0">{n.time}</span>
                         </div>
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className={n.type === 'withdrawal' ? 'font-extrabold text-amber-600' : 'font-bold text-emerald-600'}>
-                            {n.type === 'withdrawal' ? `Amount: ${n.amount}` : n.balance}
+                          <span className={
+                            n.type === 'withdrawal'
+                              ? 'font-extrabold text-amber-600'
+                              : n.type === 'customer_service'
+                              ? 'text-gray-600 italic truncate max-w-[200px]'
+                              : 'font-bold text-emerald-600'
+                          }>
+                            {n.type === 'withdrawal'
+                              ? `Amount: ${n.amount}`
+                              : n.type === 'customer_service'
+                              ? `"${n.message}"`
+                              : n.balance}
                           </span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                             n.type === 'withdrawal'
                               ? (n.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800 animate-pulse')
+                              : n.type === 'customer_service'
+                              ? (n.clientType === 'existing' ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800')
                               : (n.authStatus === 'authorized' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')
                           }`}>
-                            {n.status || (n.authStatus === 'authorized' ? '✓ Authorized' : 'Pending Review')}
+                            {n.type === 'customer_service'
+                              ? (n.clientType === 'existing' ? '● Existing Client' : '● New Client')
+                              : (n.status || (n.authStatus === 'authorized' ? '✓ Authorized' : 'Pending Review'))}
                           </span>
                         </div>
                       </div>
@@ -469,6 +570,15 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                     className="text-xs font-bold text-amber-600 hover:text-amber-800 transition-colors cursor-pointer"
                   >
                     Withdrawals →
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsNotifOpen(false);
+                      router.push('/admin/customer-service');
+                    }}
+                    className="text-xs font-bold text-sky-600 hover:text-sky-800 transition-colors cursor-pointer"
+                  >
+                    Customer Service →
                   </button>
                   <button
                     onClick={() => {

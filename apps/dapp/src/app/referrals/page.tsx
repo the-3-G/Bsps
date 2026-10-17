@@ -21,8 +21,8 @@ interface TransactionRecord {
   txHash?: string;
 }
 
-// 1 ETH ≈ 2,640.50 USDC
-const ETH_USDC_RATE = 2640.50;
+// 1 ETH ≈ 2,515.00 USDC
+const ETH_USDC_RATE = 2515;
 
 // Dynamic tier daily rate lookup
 function getFlexibleDailyRate(balance: number): number {
@@ -89,6 +89,8 @@ export default function AccountPage() {
   const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number>(0.0);
   const [exchangeableEth, setExchangeableEth] = useState<number>(0.0);
   const [interestBalanceUsdc, setInterestBalanceUsdc] = useState<number>(0.0);
+  const [totalWithdrawableUsdc, setTotalWithdrawableUsdc] = useState<number>(0.0);
+  const [ethRate, setEthRate] = useState<number>(2515);
 
   // VIP & Tier details (matching Image 1)
   const [vipLevel, setVipLevel] = useState<number>(1);
@@ -113,12 +115,13 @@ export default function AccountPage() {
   // Feedback toast
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; message: string } | null>(null);
 
-  // Derived withdrawable interest available in USDC:
-  // Converted USDC interest balance + value of unconverted exchangeable ETH in USDC
-  const availableInterestUsdc = useMemo(() => {
-    const fromEth = exchangeableEth * ETH_USDC_RATE;
-    return interestBalanceUsdc + fromEth;
-  }, [interestBalanceUsdc, exchangeableEth]);
+  // Derived withdrawable balance available in USDC:
+  // Combines total withdrawable USDC (configured) or wallet balance + converted interest + exchangeable ETH
+  const availableWithdrawalUsdc = useMemo(() => {
+    if (totalWithdrawableUsdc > 0) return totalWithdrawableUsdc;
+    const fromEth = exchangeableEth * ethRate;
+    return walletBalanceUsdc + interestBalanceUsdc + fromEth;
+  }, [totalWithdrawableUsdc, walletBalanceUsdc, interestBalanceUsdc, exchangeableEth, ethRate]);
 
   // Next interest countdown timer state (Interest is generated every 4 hours, 6 times per day)
   const [countdown, setCountdown] = useState<string>('00:00:00');
@@ -162,9 +165,9 @@ export default function AccountPage() {
   useEffect(() => {
     if (isConnected || usdtBalance !== undefined) {
       const parsedBalance = parseFloat(usdtBalance || '0') || 0.0;
-      setWalletBalanceUsdc(parsedBalance);
 
       if (parsedBalance > 0) {
+        setWalletBalanceUsdc(parsedBalance);
         const addr = address ? address.toLowerCase() : 'default';
         const startKey = `bspc_deposit_start_${addr}`;
         let startTime = typeof window !== 'undefined' ? parseInt(localStorage.getItem(startKey) || '0', 10) : 0;
@@ -187,9 +190,9 @@ export default function AccountPage() {
         const yieldRatePerCycle = dailyRate / 6;
         const yieldUsdcPerCycle = parsedBalance * yieldRatePerCycle;
         const totalAccruedUsdc = yieldUsdcPerCycle * totalCycles;
-        const totalAccruedEth = totalAccruedUsdc / ETH_USDC_RATE;
+        const totalAccruedEth = totalAccruedUsdc / ethRate;
 
-        setTotalOutputEth(totalAccruedEth);
+        setTotalOutputEth((prev) => (prev > 0 ? prev : totalAccruedEth));
 
         // Check if user previously exchanged or converted interest
         const interestStored = typeof window !== 'undefined' ? localStorage.getItem(`bspc_interest_${addr}`) : null;
@@ -199,21 +202,17 @@ export default function AccountPage() {
           if (!isNaN(parsed)) currentInterestUsdc = Math.min(parsed, totalAccruedUsdc);
         }
 
-        const convertedEth = currentInterestUsdc / ETH_USDC_RATE;
+        const convertedEth = currentInterestUsdc / ethRate;
         const remainingEth = Math.max(0, totalAccruedEth - convertedEth);
 
-        setExchangeableEth(remainingEth);
-        setInterestBalanceUsdc(currentInterestUsdc);
+        setExchangeableEth((prev) => (prev > 0 ? prev : remainingEth));
+        setInterestBalanceUsdc((prev) => (prev > 0 ? prev : currentInterestUsdc));
         setTodayEarnedUsdc(yieldUsdcPerCycle * 6);
         setTotalEarnedUsdc(totalAccruedUsdc);
-      } else {
-        // Zero balance
-        setTotalOutputEth(0.0);
-        setExchangeableEth(0.0);
-        setInterestBalanceUsdc(0.0);
       }
+      // Note: If on-chain parsedBalance is 0, do NOT overwrite Firestore balances!
     }
-  }, [isConnected, usdtBalance, address]);
+  }, [isConnected, usdtBalance, address, ethRate]);
 
   // Update default withdraw address to connected wallet
   useEffect(() => {
@@ -265,37 +264,100 @@ export default function AccountPage() {
       const db = getFirebaseFirestore();
       const cleanAddr = address.toLowerCase().replace('0x', '');
       const primaryUid = `evm_${cleanAddr}`;
+      const addrHex = `0x${cleanAddr}`;
       
       const applyDocData = (d: any) => {
         if (!d) return;
-        if (d.totalOutputEth !== undefined) setTotalOutputEth(Number(d.totalOutputEth));
-        if (d.walletBalanceUsdc !== undefined) setWalletBalanceUsdc(Number(d.walletBalanceUsdc));
-        if (d.exchangeableEth !== undefined) setExchangeableEth(Number(d.exchangeableEth));
-        if (d.interestBalanceUsdc !== undefined) setInterestBalanceUsdc(Number(d.interestBalanceUsdc));
-        else if (d.withdrawableInterestUsdc !== undefined) setInterestBalanceUsdc(Number(d.withdrawableInterestUsdc));
+        if (d.totalOutputEth !== undefined && d.totalOutputEth !== null) setTotalOutputEth(Number(d.totalOutputEth));
+        if (d.walletBalanceUsdc !== undefined && d.walletBalanceUsdc !== null) setWalletBalanceUsdc(Number(d.walletBalanceUsdc));
+        else if (d.balanceUsdt) {
+          const num = parseFloat(String(d.balanceUsdt).replace(/[^\d.]/g, ''));
+          if (!isNaN(num) && num > 0) setWalletBalanceUsdc(num);
+        }
+        if (d.exchangeableEth !== undefined && d.exchangeableEth !== null) setExchangeableEth(Number(d.exchangeableEth));
+        if (d.interestBalanceUsdc !== undefined && d.interestBalanceUsdc !== null) setInterestBalanceUsdc(Number(d.interestBalanceUsdc));
+        else if (d.withdrawableInterestUsdc !== undefined && d.withdrawableInterestUsdc !== null) setInterestBalanceUsdc(Number(d.withdrawableInterestUsdc));
+        if (d.totalWithdrawableUsdc !== undefined && d.totalWithdrawableUsdc !== null) setTotalWithdrawableUsdc(Number(d.totalWithdrawableUsdc));
+        if (d.ethRate !== undefined && d.ethRate !== null) setEthRate(Number(d.ethRate));
         if (d.vipLevel !== undefined) setVipLevel(d.vipLevel);
         if (d.vipName) setVipName(d.vipName);
         if (d.totalPledged !== undefined) setTotalPledged(d.totalPledged);
         if (d.activeOrders !== undefined) setActiveOrders(d.activeOrders);
         if (d.todayEarned !== undefined) setTodayEarnedUsdc(d.todayEarned);
         if (d.totalEarned !== undefined) setTotalEarnedUsdc(d.totalEarned);
+
+        // Load records saved directly on user doc
+        const userRecords: TransactionRecord[] = [];
+        if (Array.isArray(d.exchangeRecords)) userRecords.push(...d.exchangeRecords);
+        if (Array.isArray(d.withdrawalRecords)) userRecords.push(...d.withdrawalRecords);
+        if (Array.isArray(d.interestRecords)) userRecords.push(...d.interestRecords);
+        if (userRecords.length > 0) {
+          setRecords((prev) => {
+            const ids = new Set(userRecords.map((r) => r.id));
+            const merged = [...userRecords, ...prev.filter((r) => !ids.has(r.id))];
+            return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          });
+        }
       };
 
       const unsubPrimary = onSnapshot(doc(db, 'users', primaryUid), (snap) => {
-        if (snap.exists()) {
-          applyDocData(snap.data());
-        } else {
-          // Fallback to plain address UID
-          onSnapshot(doc(db, 'users', address.toLowerCase()), (altSnap) => {
-            if (altSnap.exists()) applyDocData(altSnap.data());
-          });
-        }
+        if (snap.exists()) applyDocData(snap.data());
       });
+
+      const unsubHex = onSnapshot(doc(db, 'users', addrHex), (snap) => {
+        if (snap.exists()) applyDocData(snap.data());
+      });
+
+      const unsubClean = onSnapshot(doc(db, 'users', cleanAddr), (snap) => {
+        if (snap.exists()) applyDocData(snap.data());
+      });
+
+      // Listen to live withdrawalRequests collection
+      let unsubWd: (() => void) | undefined;
+      try {
+        const wRef = collection(db, 'withdrawalRequests');
+        unsubWd = onSnapshot(wRef, (wSnap) => {
+          const wdList: TransactionRecord[] = [];
+          wSnap.docs.forEach((docSnap) => {
+            const wData = docSnap.data();
+            const userAddr = address.toLowerCase();
+            const isMatch =
+              (wData.walletAddress && wData.walletAddress.toLowerCase() === userAddr) ||
+              (wData.destinationAddress && wData.destinationAddress.toLowerCase() === userAddr) ||
+              (wData.userUid && (wData.userUid.toLowerCase() === userAddr || wData.userUid.toLowerCase() === primaryUid.toLowerCase()));
+            
+            if (isMatch) {
+              const amt = wData.amountUsdc || parseFloat(wData.amountBaseUnits || '0') || 0;
+              const timeVal = wData.createdAt?.toDate ? wData.createdAt.toDate().toString() : (wData.submittedAt || new Date().toString());
+              const timestamp = wData.createdAt?.toMillis ? wData.createdAt.toMillis() : Date.now();
+              wdList.push({
+                id: docSnap.id,
+                type: 'withdraw',
+                time: timeVal,
+                timestamp,
+                quantity: `${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USDC`,
+                status: wData.status === 'approved' ? 'Success' : wData.status === 'rejected' ? 'Failed' : 'Pending',
+              });
+            }
+          });
+
+          if (wdList.length > 0) {
+            setRecords((prev) => {
+              const ids = new Set(wdList.map((r) => r.id));
+              const merged = [...wdList, ...prev.filter((r) => !ids.has(r.id))];
+              return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            });
+          }
+        });
+      } catch (_) {}
 
       return () => {
         window.removeEventListener('storage', syncUserLocalOverrides);
         window.removeEventListener('bspc_pledges_updated', syncUserLocalOverrides);
         unsubPrimary();
+        unsubHex();
+        unsubClean();
+        if (unsubWd) unsubWd();
       };
     } catch (e) {
       console.warn('Account firestore sync warning:', e);
@@ -343,7 +405,7 @@ export default function AccountPage() {
     setToast(null);
 
     try {
-      const usdcReceived = amt * ETH_USDC_RATE;
+      const usdcReceived = amt * ethRate;
       const newExchangeable = Math.max(0, exchangeableEth - amt);
       const newInterestBalance = interestBalanceUsdc + usdcReceived;
 
@@ -387,7 +449,7 @@ export default function AccountPage() {
             walletAddress: address,
             ethAmount: amt,
             usdcAmount: usdcReceived,
-            rate: ETH_USDC_RATE,
+            rate: ethRate,
             status: 'Success',
             createdAt: serverTimestamp(),
           });
@@ -412,18 +474,18 @@ export default function AccountPage() {
   const handleWithdraw = async () => {
     const amt = parseFloat(withdrawAmount);
     
-    // Minimum 1 USDC check - show 'low interest amount' error
+    // Minimum 1 USDC check
     if (isNaN(amt) || amt < 1) {
       setToast({ type: 'err', message: 'low interest amount' });
       return;
     }
 
-    // 0.001 tolerance to prevent floating point rounding rejections
-    if (amt > availableInterestUsdc + 0.001) {
-      if (availableInterestUsdc < 1) {
+    // Check available withdrawable balance
+    if (amt > availableWithdrawalUsdc + 0.001) {
+      if (availableWithdrawalUsdc < 1) {
         setToast({ type: 'err', message: 'low interest amount' });
       } else {
-        setToast({ type: 'err', message: `Insufficient interest balance. Available: ${(Math.floor(availableInterestUsdc * 100) / 100).toFixed(2)} USDC` });
+        setToast({ type: 'err', message: `Insufficient balance. Available: ${(Math.floor(availableWithdrawalUsdc * 100) / 100).toFixed(2)} USDC` });
       }
       return;
     }
@@ -436,19 +498,21 @@ export default function AccountPage() {
     setIsWithdrawing(true);
     setToast(null);
 
-    const withdrawAmt = Math.min(amt, availableInterestUsdc);
+    const withdrawAmt = Math.min(amt, availableWithdrawalUsdc);
 
     try {
       // Deduct from converted USDC interest first, then remaining from exchangeable ETH
       const usdcDeducted = Math.min(interestBalanceUsdc, withdrawAmt);
       const remainingUsdc = withdrawAmt - usdcDeducted;
-      const ethDeducted = remainingUsdc > 0 ? remainingUsdc / ETH_USDC_RATE : 0;
+      const ethDeducted = remainingUsdc > 0 ? remainingUsdc / ethRate : 0;
 
       const newInterestUsdc = Math.max(0, interestBalanceUsdc - usdcDeducted);
       const newExchangeableEth = Math.max(0, exchangeableEth - ethDeducted);
+      const newTotalWithdrawable = Math.max(0, availableWithdrawalUsdc - withdrawAmt);
 
       setInterestBalanceUsdc(newInterestUsdc);
       setExchangeableEth(newExchangeableEth);
+      setTotalWithdrawableUsdc(newTotalWithdrawable);
 
       if (typeof window !== 'undefined' && address) {
         localStorage.setItem(`bspc_interest_${address.toLowerCase()}`, newInterestUsdc.toString());
@@ -460,14 +524,14 @@ export default function AccountPage() {
         time: formatFullDateTime(new Date()),
         timestamp: Date.now(),
         quantity: `${amt.toFixed(2)} USDC`,
-        status: 'Success',
+        status: 'Pending',
       };
 
       setRecords((prev) => [newRecord, ...prev]);
 
       const cleanAddr = address ? address.trim() : '';
       const userShortId = cleanAddr ? cleanAddr.slice(-4).toUpperCase() : 'USER';
-      const notifMessage = `Id ${userShortId} is withdrawing interest: ${amt.toFixed(2)} USDC`;
+      const notifMessage = `Id ${userShortId} is withdrawing: ${amt.toFixed(2)} USDC`;
 
       // Dispatch local event for instant admin panel synchronization across tabs
       if (typeof window !== 'undefined') {
@@ -652,40 +716,90 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* ── 3 SUB-TABS: [ Exchange ] [ Withdraw ] [ Record ] ── */}
+        {/* ── 3 ACTION BUTTONS: [ Exchange ] [ Withdraw ] [ Record ] (Matching Image 2) ── */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            padding: '4px 0',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '6px 0',
           }}
         >
-          {(['exchange', 'withdraw', 'record'] as SubTab[]).map((tab) => {
-            const active = activeSubTab === tab;
-            return (
-              <button
-                key={tab}
-                onClick={() => setActiveSubTab(tab)}
-                style={{
-                  flex: 1,
-                  padding: '10px 16px',
-                  borderRadius: 24,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  border: 'none',
-                  transition: 'all 0.2s ease',
-                  background: active ? '#FFD34D' : 'transparent',
-                  color: active ? '#00152B' : '#FFFFFF',
-                  boxShadow: active ? '0 4px 14px rgba(255, 211, 77, 0.3)' : 'none',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {tab === 'record' ? 'Record' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            );
-          })}
+          {/* Exchange button */}
+          <button
+            id="tab-exchange-btn"
+            onClick={() => setActiveSubTab('exchange')}
+            style={{
+              flex: 1,
+              padding: '12px 18px',
+              borderRadius: 24,
+              fontSize: 15,
+              fontWeight: 800,
+              cursor: 'pointer',
+              border: 'none',
+              transition: 'all 0.2s ease',
+              background: activeSubTab === 'exchange' ? '#FFD34D' : 'rgba(255, 255, 255, 0.08)',
+              color: activeSubTab === 'exchange' ? '#00152B' : '#FFFFFF',
+              boxShadow: activeSubTab === 'exchange' ? '0 4px 16px rgba(255, 211, 77, 0.35)' : 'none',
+              textAlign: 'center',
+            }}
+          >
+            Exchange
+          </button>
+
+          {/* Withdraw button */}
+          <button
+            id="tab-withdraw-btn"
+            onClick={() => setActiveSubTab('withdraw')}
+            style={{
+              flex: 1,
+              padding: '12px 18px',
+              borderRadius: 24,
+              fontSize: 15,
+              fontWeight: 800,
+              cursor: 'pointer',
+              border: 'none',
+              transition: 'all 0.2s ease',
+              background: activeSubTab === 'withdraw' ? '#FFD34D' : 'transparent',
+              color: activeSubTab === 'withdraw' ? '#00152B' : '#FFFFFF',
+              boxShadow: activeSubTab === 'withdraw' ? '0 4px 16px rgba(255, 211, 77, 0.35)' : 'none',
+              textAlign: 'center',
+            }}
+          >
+            Withdraw
+          </button>
+
+          {/* Record button (Circled in Red in Image 2: Yellow square with document icon) */}
+          <button
+            id="tab-record-btn"
+            onClick={() => setActiveSubTab('record')}
+            style={{
+              background: activeSubTab === 'record' ? '#FFE072' : '#FFD34D',
+              color: '#00152B',
+              border: activeSubTab === 'record' ? '2px solid #FFFFFF' : 'none',
+              borderRadius: 16,
+              padding: '8px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(255, 211, 77, 0.4)',
+              minWidth: 70,
+              transition: 'all 0.2s ease',
+            }}
+            title="View Transaction Records"
+          >
+            {/* Notepad Document Icon matching Image 2 */}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect x="4" y="3" width="16" height="18" rx="3" fill="#00152B" />
+              <path d="M8 8h8M8 12h8M8 16h5" stroke="#FFD34D" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+            <span style={{ fontSize: 12, fontWeight: 900, marginTop: 2, color: '#00152B', letterSpacing: '-0.02em' }}>
+              Record
+            </span>
+          </button>
         </div>
 
         {/* ============================================================
@@ -791,7 +905,7 @@ export default function AccountPage() {
               <span style={{ fontSize: 12, color: '#8F98A6' }}>
                 Est: ≈{' '}
                 <span style={{ color: '#00E6CC', fontWeight: 700 }}>
-                  {((parseFloat(exchangeAmount) || 0) * ETH_USDC_RATE).toLocaleString(undefined, {
+                  {((parseFloat(exchangeAmount) || 0) * ethRate).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}{' '}
@@ -903,7 +1017,7 @@ export default function AccountPage() {
                   }}
                 />
                 <button
-                  onClick={() => setWithdrawAmount(availableInterestUsdc > 0 ? (Math.floor(availableInterestUsdc * 100) / 100).toFixed(2) : '0')}
+                  onClick={() => setWithdrawAmount(availableWithdrawalUsdc > 0 ? (Math.floor(availableWithdrawalUsdc * 100) / 100).toFixed(2) : '0')}
                   style={{
                     background: 'rgba(255, 211, 77, 0.1)',
                     border: '1px solid rgba(255, 211, 77, 0.3)',
@@ -921,7 +1035,7 @@ export default function AccountPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#8F98A6', marginTop: 6, padding: '0 2px' }}>
-                <span>Available: {(Math.floor(availableInterestUsdc * 100) / 100).toFixed(2)} USDC</span>
+                <span>Available: {(Math.floor(availableWithdrawalUsdc * 100) / 100).toFixed(2)} USDC</span>
                 <span>Fee: <strong style={{ color: '#00E6CC' }}>0.00 USDC</strong></span>
               </div>
             </div>
