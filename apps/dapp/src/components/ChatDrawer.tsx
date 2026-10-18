@@ -110,6 +110,17 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
 
+  // Auto-scroll to latest message when messages change, agent types, or drawer opens/resizes
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [messages.length, isAgentTyping, isOpen, viewportHeight]);
+
   // Robust universal clipboard copy helper (supports mobile WebViews and non-secure contexts)
   const copyToClipboard = async (text: string): Promise<boolean> => {
     if (!text) return false;
@@ -501,9 +512,9 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
       }
     });
 
-    // 2. Listen to messages (ordered by createdAt, limited to 50)
+    // 2. Listen to messages (ordered by createdAt descending to fetch latest 300 messages, then reversed to display chronologically)
     const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
-    const q = query(msgsRef, orderBy('createdAt', 'asc'), limit(50));
+    const q = query(msgsRef, orderBy('createdAt', 'desc'), limit(300));
 
     const unsubMsgs = onSnapshot(q, (snapshot) => {
       const loadedMsgs: ChatMessage[] = [];
@@ -521,7 +532,16 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
             : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       });
-      setMessages(loadedMsgs);
+      // Reverse to render chronologically oldest-to-newest
+      loadedMsgs.reverse();
+
+      setMessages((prev) => {
+        const serverTexts = new Set(loadedMsgs.map((m) => `${m.senderType}:${m.text}`));
+        const pendingOptimistic = prev.filter(
+          (m) => m.id.startsWith('optimistic-') && !serverTexts.has(`${m.senderType}:${m.text}`)
+        );
+        return [...loadedMsgs, ...pendingOptimistic];
+      });
     });
 
     return () => {
@@ -583,6 +603,24 @@ export function ChatDrawer({ isOpen, onClose, initialSource = 'general_support' 
     setInputText('');
     handleRemoveSelectedFile();
     setErrorMessage(null);
+
+    // Optimistic UI insertion so user immediately sees their text without delay
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticMsg: ChatMessage = {
+      id: optimisticId,
+      senderType: address ? 'user' : 'guest',
+      senderUid: address ? address.toLowerCase() : (userUid || 'user'),
+      text: cleanText,
+      messageType: uploadedType,
+      attachmentUrl: uploadedUrl,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 20);
 
     // Cancel typing indicator
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);

@@ -338,7 +338,7 @@ export function ThreadClient() {
 
       // 3. Listen to messages (realtime onSnapshot)
       const msgsRef = collection(db, 'chatConversations', conversationId, 'messages');
-      const qMsgs = query(msgsRef, orderBy('createdAt', 'asc'), limit(100));
+      const qMsgs = query(msgsRef, orderBy('createdAt', 'desc'), limit(300));
       const unsubMsgs = onSnapshot(qMsgs, (snapshot) => {
         const list: ThreadMessage[] = [];
         snapshot.forEach((d) => {
@@ -369,6 +369,7 @@ export function ThreadClient() {
               : 'Just now',
           });
         });
+        list.reverse();
         setMessages(list);
       });
 
