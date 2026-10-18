@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Grid3X3, Sparkles, CheckCircle2 } from 'lucide-react';
 import { OrderModal, VipTierItem } from '../../components/OrderModal';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { doc, collection, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, collection, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useWeb3 } from '../../context/Web3Context';
 
 /* ================================================================
@@ -457,6 +457,15 @@ export default function PledgesPage() {
   const handleRedeemContract = async (recordId: string, contractId: string) => {
     setRedeemingId(recordId);
     try {
+      // Find the contract record being redeemed
+      const targetRecord = allContractRecords.find(
+        (r: any) => r.id === recordId || r.contractId === recordId || r.id === contractId || r.contractId === contractId
+      );
+
+      const rEth = parseFloat(String(targetRecord?.reward || targetRecord?.miningReward || '0').replace(/[^\d.]/g, '')) || 0;
+      const bEth = parseFloat(String(targetRecord?.additionalReward || targetRecord?.bonusReward || targetRecord?.ethReward || '0').replace(/[^\d.]/g, '')) || 0;
+      const totalRedeemedEth = rEth + bEth;
+
       // Update local state
       setAllContractRecords((prev: any[]) =>
         prev.map((r: any) => (r.id === recordId ? { ...r, status: 'redeemed' } : r))
@@ -467,14 +476,56 @@ export default function PledgesPage() {
         const db = getFirebaseFirestore();
         const pledgeDocRef = doc(db, 'pledges', recordId);
         await setDoc(pledgeDocRef, { status: 'redeemed', updatedAt: new Date().toISOString() }, { merge: true });
+
+        // Also duplicate to numeric/prefixed IDs
+        if (recordId.startsWith('p-')) {
+          await setDoc(doc(db, 'pledges', recordId.slice(2)), { status: 'redeemed', updatedAt: new Date().toISOString() }, { merge: true });
+        }
+
+        // Automatically credit redeemed smart contract ETH into user's Exchangeable balance
+        if (address && totalRedeemedEth > 0) {
+          const cleanAddr = address.toLowerCase().replace('0x', '');
+          const uidsToSync = [
+            `evm_${cleanAddr}`,
+            `0x${cleanAddr}`,
+            cleanAddr,
+          ];
+
+          for (const uid of uidsToSync) {
+            const userDocRef = doc(db, 'users', uid);
+            const userSnap = await getDoc(userDocRef);
+            const currentExchangeable = userSnap.exists() ? (Number(userSnap.data()?.exchangeableEth) || 0) : 0;
+            const newExchangeable = currentExchangeable + totalRedeemedEth;
+
+            await setDoc(
+              userDocRef,
+              {
+                exchangeableEth: newExchangeable,
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+
+          if (typeof window !== 'undefined') {
+            const localKey = `bspc_user_overrides_${cleanAddr}`;
+            try {
+              const cur = JSON.parse(localStorage.getItem(localKey) || '{}');
+              cur.uncollectedAmount = `${totalRedeemedEth} ETH`;
+              localStorage.setItem(localKey, JSON.stringify(cur));
+            } catch (_) {}
+            window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: { recordId, totalRedeemedEth } }));
+          }
+        }
       } catch (err) {
         console.warn('Firestore redeem update notice:', err);
       }
 
-      setRedeemToast(`✓ Smart Contract ${contractId} successfully redeemed!`);
+      setRedeemToast(`✓ Smart Contract ${contractId} successfully redeemed! ${totalRedeemedEth > 0 ? `+${totalRedeemedEth} ETH added to Exchangeable!` : ''}`);
       setTimeout(() => {
         setRedeemToast(null);
-      }, 4000);
+      }, 4500);
     } finally {
       setRedeemingId(null);
     }

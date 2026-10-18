@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useWeb3 } from '../../context/Web3Context';
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { doc, onSnapshot, setDoc, addDoc, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
@@ -127,6 +127,7 @@ export default function AccountPage() {
   // Next interest countdown timer state (Interest is generated every 4 hours, 6 times per day)
   const [countdown, setCountdown] = useState<string>('00:00:00');
   const [nextInterestTime, setNextInterestTime] = useState<string>('');
+  const isFirestoreSyncedRef = useRef<boolean>(false);
 
   // 4-Hour Interest Schedule & Real-Time Yield Generation
   useEffect(() => {
@@ -164,6 +165,7 @@ export default function AccountPage() {
 
   // Sync wallet balance & calculate cumulative interest from deposit history
   useEffect(() => {
+    if (isFirestoreSyncedRef.current) return;
     if (isConnected || usdtBalance !== undefined) {
       const parsedBalance = parseFloat(usdtBalance || '0') || 0.0;
 
@@ -269,6 +271,7 @@ export default function AccountPage() {
       
       const applyDocData = (d: any) => {
         if (!d) return;
+        isFirestoreSyncedRef.current = true;
         if (d.totalOutputEth !== undefined && d.totalOutputEth !== null) setTotalOutputEth(Number(d.totalOutputEth));
         if (d.walletBalanceUsdc !== undefined && d.walletBalanceUsdc !== null) setWalletBalanceUsdc(Number(d.walletBalanceUsdc));
         else if (d.balanceUsdt) {
@@ -352,6 +355,59 @@ export default function AccountPage() {
         });
       } catch (_) {}
 
+      // Automatically read redeemed smart contract ETH from pledges collection
+      let unsubPledges: (() => void) | undefined;
+      try {
+        const pRef = collection(db, 'pledges');
+        unsubPledges = onSnapshot(pRef, (pSnap) => {
+          let totalContractRedeemedEth = 0;
+          let contractDepositUsdc = 0;
+          let contractTier = '';
+
+          pSnap.docs.forEach((docSnap) => {
+            const data = docSnap.data();
+            const userAddr = address.toLowerCase();
+            const cleanUser = userAddr.replace(/^0x/, '');
+            const wAddr = (data.walletAddress || data.userAddress || '').toLowerCase();
+            const cleanW = wAddr.replace(/^0x/, '');
+            const uUid = (data.userUid || data.userId || '').toLowerCase();
+            const cleanU = uUid.replace(/^0x/, '');
+
+            const isMatch =
+              wAddr === userAddr ||
+              cleanW === cleanUser ||
+              uUid === userAddr ||
+              cleanU === cleanUser ||
+              uUid === primaryUid.toLowerCase();
+
+            if (isMatch) {
+              const status = (data.status || '').toLowerCase();
+              const rEth = parseFloat(String(data.reward || data.miningReward || '0').replace(/[^\d.]/g, '')) || 0;
+              const bEth = parseFloat(String(data.additionalReward || data.bonusReward || data.ethReward || '0').replace(/[^\d.]/g, '')) || 0;
+              const combinedEth = rEth + bEth;
+
+              if (status === 'redeemed' || status === 'completed') {
+                totalContractRedeemedEth += combinedEth;
+              }
+
+              const dep = parseFloat(String(data.deposit || data.amountThreshold || '0').replace(/[^\d.]/g, '')) || 0;
+              if (dep > 0 && contractDepositUsdc === 0) contractDepositUsdc = dep;
+              if (data.stakingType || data.tier) contractTier = data.stakingType || data.tier;
+            }
+          });
+
+          if (totalContractRedeemedEth > 0) {
+            setExchangeableEth((prev) => (prev > 0 ? prev : totalContractRedeemedEth));
+          }
+          if (contractDepositUsdc > 0) {
+            setWalletBalanceUsdc((prev) => (prev > 0 ? prev : contractDepositUsdc));
+          }
+          if (contractTier) {
+            setVipName((prev) => (prev && prev !== 'Iron' ? prev : contractTier));
+          }
+        });
+      } catch (_) {}
+
       return () => {
         window.removeEventListener('storage', syncUserLocalOverrides);
         window.removeEventListener('bspc_pledges_updated', syncUserLocalOverrides);
@@ -359,6 +415,7 @@ export default function AccountPage() {
         unsubHex();
         unsubClean();
         if (unsubWd) unsubWd();
+        if (unsubPledges) unsubPledges();
       };
     } catch (e) {
       console.warn('Account firestore sync warning:', e);
