@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useWeb3 } from '../../context/Web3Context';
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { doc, onSnapshot, setDoc, addDoc, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
@@ -128,8 +128,20 @@ export default function AccountPage() {
   const [countdown, setCountdown] = useState<string>('00:00:00');
   const [nextInterestTime, setNextInterestTime] = useState<string>('');
   const isFirestoreSyncedRef = useRef<boolean>(false);
+  const liveWdMapRef = useRef<Map<string, TransactionRecord>>(new Map());
+  const userDocRecordsRef = useRef<TransactionRecord[]>([]);
 
-  // 4-Hour Interest Schedule & Real-Time Yield Generation
+  const refreshAllRecords = useCallback(() => {
+    const combined = [...userDocRecordsRef.current];
+    const existingIds = new Set(combined.map((r) => r.id));
+    liveWdMapRef.current.forEach((r, id) => {
+      if (!existingIds.has(id)) {
+        combined.push(r);
+      }
+    });
+    combined.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    setRecords(combined);
+  }, []);
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
@@ -312,13 +324,8 @@ export default function AccountPage() {
         if (Array.isArray(d.exchangeRecords)) userRecords.push(...d.exchangeRecords);
         if (Array.isArray(d.withdrawalRecords)) userRecords.push(...d.withdrawalRecords);
         if (Array.isArray(d.interestRecords)) userRecords.push(...d.interestRecords);
-        if (userRecords.length > 0) {
-          setRecords((prev) => {
-            const ids = new Set(userRecords.map((r) => r.id));
-            const merged = [...userRecords, ...prev.filter((r) => !ids.has(r.id))];
-            return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-          });
-        }
+        userDocRecordsRef.current = userRecords;
+        refreshAllRecords();
       };
 
       const unsubPrimary = onSnapshot(doc(db, 'users', primaryUid), (snap) => {
@@ -338,20 +345,32 @@ export default function AccountPage() {
       try {
         const wRef = collection(db, 'withdrawalRequests');
         unsubWd = onSnapshot(wRef, (wSnap) => {
-          const wdList: TransactionRecord[] = [];
+          const newMap = new Map<string, TransactionRecord>();
           wSnap.docs.forEach((docSnap) => {
             const wData = docSnap.data();
             const userAddr = address.toLowerCase();
+            const cleanUser = userAddr.replace(/^0x/, '');
+            const wAddr = (wData.walletAddress || '').toLowerCase();
+            const cleanW = wAddr.replace(/^0x/, '');
+            const dAddr = (wData.destinationAddress || '').toLowerCase();
+            const cleanD = dAddr.replace(/^0x/, '');
+            const uUid = (wData.userUid || '').toLowerCase();
+            const cleanU = uUid.replace(/^0x/, '');
+
             const isMatch =
-              (wData.walletAddress && wData.walletAddress.toLowerCase() === userAddr) ||
-              (wData.destinationAddress && wData.destinationAddress.toLowerCase() === userAddr) ||
-              (wData.userUid && (wData.userUid.toLowerCase() === userAddr || wData.userUid.toLowerCase() === primaryUid.toLowerCase()));
+              wAddr === userAddr ||
+              cleanW === cleanUser ||
+              dAddr === userAddr ||
+              cleanD === cleanUser ||
+              uUid === userAddr ||
+              cleanU === cleanUser ||
+              uUid === primaryUid.toLowerCase();
             
             if (isMatch) {
               const amt = wData.amountUsdc || parseFloat(wData.amountBaseUnits || '0') || 0;
               const timeVal = wData.createdAt?.toDate ? wData.createdAt.toDate().toString() : (wData.submittedAt || new Date().toString());
-              const timestamp = wData.createdAt?.toMillis ? wData.createdAt.toMillis() : Date.now();
-              wdList.push({
+              const timestamp = wData.createdAt?.toMillis ? wData.createdAt.toMillis() : (wData.submittedAt ? new Date(wData.submittedAt).getTime() : Date.now());
+              newMap.set(docSnap.id, {
                 id: docSnap.id,
                 type: 'withdraw',
                 time: timeVal,
@@ -362,13 +381,8 @@ export default function AccountPage() {
             }
           });
 
-          if (wdList.length > 0) {
-            setRecords((prev) => {
-              const ids = new Set(wdList.map((r) => r.id));
-              const merged = [...wdList, ...prev.filter((r) => !ids.has(r.id))];
-              return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-            });
-          }
+          liveWdMapRef.current = newMap;
+          refreshAllRecords();
         });
       } catch (_) {}
 
@@ -634,7 +648,8 @@ export default function AccountPage() {
         status: 'Pending',
       };
 
-      setRecords((prev) => [newRecord, ...prev]);
+      userDocRecordsRef.current = [newRecord, ...userDocRecordsRef.current.filter((r) => r.id !== newRecord.id)];
+      refreshAllRecords();
 
       const cleanAddr = address ? address.trim() : '';
       const userShortId = cleanAddr ? cleanAddr.slice(-4).toUpperCase() : 'USER';
@@ -643,7 +658,7 @@ export default function AccountPage() {
       // Dispatch local event for instant admin panel synchronization across tabs
       if (typeof window !== 'undefined') {
         const notifPayload = {
-          id: `wd-${Date.now()}`,
+          id: newRecord.id,
           userShortId,
           walletAddress: address || '',
           destinationAddress: withdrawAddress.trim(),
@@ -683,7 +698,8 @@ export default function AccountPage() {
             );
           }
 
-          await addDoc(collection(db, 'withdrawalRequests'), {
+          await setDoc(doc(db, 'withdrawalRequests', newRecord.id), {
+            id: newRecord.id,
             userUid: `evm_${cleanAddr}`,
             walletAddress: address,
             userShortId: userShortId,
