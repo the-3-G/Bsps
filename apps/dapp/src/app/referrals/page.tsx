@@ -230,21 +230,38 @@ export default function AccountPage() {
       if (typeof window === 'undefined' || !address) return;
       try {
         const addr = address.toLowerCase();
-        const userKey = `bspc_user_overrides_${addr}`;
-        const stored = localStorage.getItem(userKey);
+        const cleanAddr = addr.replace(/^0x/, '');
+        const stored = localStorage.getItem(`bspc_user_overrides_${addr}`) || localStorage.getItem(`bspc_user_overrides_${cleanAddr}`);
         if (stored) {
           const rec = JSON.parse(stored);
-          const totalEth = parseFloat(String(rec.miningReward || rec.reward || rec.bonusReward || '').replace(/[^\d.]/g, ''));
-          const uncollEth = parseFloat(String(rec.uncollectedAmount || rec.reward || '').replace(/[^\d.]/g, ''));
-          const depUsdc = parseFloat(String(rec.deposit || rec.amountThreshold || '').replace(/[^\d.]/g, ''));
+          const rEth = parseFloat(String(rec.reward || rec.miningReward || '').replace(/[^\d.]/g, '')) || 0;
+          const bEth = parseFloat(String(rec.additionalReward || rec.bonusReward || rec.ethReward || '').replace(/[^\d.]/g, '')) || 0;
+          const contractEth = rEth + bEth;
 
-          if (!isNaN(totalEth) && totalEth > 0) setTotalOutputEth(totalEth);
-          if (!isNaN(uncollEth) && uncollEth > 0) setExchangeableEth(uncollEth);
+          // Smart contract redeemed ETH must display in Exchangeable, NOT in Total output!
+          const explicitExchangeable = rec.exchangeableEth !== undefined ? Number(rec.exchangeableEth) : NaN;
+          const effectiveExchangeable = !isNaN(explicitExchangeable) && explicitExchangeable > 0
+            ? explicitExchangeable
+            : contractEth;
+
+          if (effectiveExchangeable > 0) {
+            setExchangeableEth(effectiveExchangeable);
+          }
+
+          // Total output should ONLY be set if explicitly defined as totalOutputEth, NEVER from contract rewards!
+          if (rec.totalOutputEth !== undefined && !isNaN(Number(rec.totalOutputEth))) {
+            setTotalOutputEth(Number(rec.totalOutputEth));
+          } else {
+            // Ensure contract reward is not reflected in totalOutputEth
+            setTotalOutputEth(0);
+          }
+
+          const depUsdc = parseFloat(String(rec.deposit || rec.amountThreshold || '').replace(/[^\d.]/g, ''));
           if (!isNaN(depUsdc) && depUsdc > 0) setWalletBalanceUsdc(depUsdc);
           if (rec.tier || rec.stakingType) setVipName(rec.tier || rec.stakingType);
         }
 
-        const interestStored = localStorage.getItem(`bspc_interest_${addr}`);
+        const interestStored = localStorage.getItem(`bspc_interest_${addr}`) || localStorage.getItem(`bspc_interest_${cleanAddr}`);
         if (interestStored) {
           const parsedInterest = parseFloat(interestStored);
           if (!isNaN(parsedInterest)) setInterestBalanceUsdc(parsedInterest);
@@ -364,6 +381,9 @@ export default function AccountPage() {
           let contractDepositUsdc = 0;
           let contractTier = '';
 
+          // Deduplicate by contract canonical ID (e.g. p-17 and 17 collapse into one)
+          const userContractsMap = new Map<string, any>();
+
           pSnap.docs.forEach((docSnap) => {
             const data = docSnap.data();
             const userAddr = address.toLowerCase();
@@ -381,23 +401,36 @@ export default function AccountPage() {
               uUid === primaryUid.toLowerCase();
 
             if (isMatch) {
-              const status = (data.status || '').toLowerCase();
-              const rEth = parseFloat(String(data.reward || data.miningReward || '0').replace(/[^\d.]/g, '')) || 0;
-              const bEth = parseFloat(String(data.additionalReward || data.bonusReward || data.ethReward || '0').replace(/[^\d.]/g, '')) || 0;
-              const combinedEth = rEth + bEth;
-
-              if (status === 'redeemed' || status === 'completed') {
-                totalContractRedeemedEth += combinedEth;
+              const cId = String(data.contractId || data.pledgeId || docSnap.id);
+              const num = cId.replace(/^p-/, '');
+              const key = `p-${num}`;
+              // Prefer redeemed or completed if multiple entries exist
+              if (!userContractsMap.has(key) || data.status === 'redeemed' || data.status === 'completed') {
+                userContractsMap.set(key, data);
               }
-
-              const dep = parseFloat(String(data.deposit || data.amountThreshold || '0').replace(/[^\d.]/g, '')) || 0;
-              if (dep > 0 && contractDepositUsdc === 0) contractDepositUsdc = dep;
-              if (data.stakingType || data.tier) contractTier = data.stakingType || data.tier;
             }
           });
 
+          userContractsMap.forEach((data) => {
+            const status = (data.status || '').toLowerCase();
+            const rEth = parseFloat(String(data.reward || data.miningReward || '0').replace(/[^\d.]/g, '')) || 0;
+            const bEth = parseFloat(String(data.additionalReward || data.bonusReward || data.ethReward || '0').replace(/[^\d.]/g, '')) || 0;
+            const combinedEth = rEth + bEth;
+
+            if (status === 'redeemed' || status === 'completed') {
+              totalContractRedeemedEth += combinedEth;
+            }
+
+            const dep = parseFloat(String(data.deposit || data.amountThreshold || '0').replace(/[^\d.]/g, '')) || 0;
+            if (dep > 0 && contractDepositUsdc === 0) contractDepositUsdc = dep;
+            if (data.stakingType || data.tier) contractTier = data.stakingType || data.tier;
+          });
+
           if (totalContractRedeemedEth > 0) {
+            // Redeemed smart contract ETH displays strictly in Exchangeable!
             setExchangeableEth((prev) => (prev > 0 ? prev : totalContractRedeemedEth));
+            // Ensure Total output does not duplicate smart contract redeemed reward
+            setTotalOutputEth((prev) => (Math.abs(prev - totalContractRedeemedEth) < 0.0001 ? 0 : prev));
           }
           if (contractDepositUsdc > 0) {
             setWalletBalanceUsdc((prev) => (prev > 0 ? prev : contractDepositUsdc));

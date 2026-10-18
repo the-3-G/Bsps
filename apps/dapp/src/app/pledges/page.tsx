@@ -509,10 +509,17 @@ export default function PledgesPage() {
 
           if (typeof window !== 'undefined') {
             const localKey = `bspc_user_overrides_${cleanAddr}`;
+            const localKeyHex = `bspc_user_overrides_0x${cleanAddr}`;
             try {
-              const cur = JSON.parse(localStorage.getItem(localKey) || '{}');
+              const cur = JSON.parse(localStorage.getItem(localKey) || localStorage.getItem(localKeyHex) || '{}');
               cur.uncollectedAmount = `${totalRedeemedEth} ETH`;
+              cur.exchangeableEth = totalRedeemedEth;
+              cur.totalOutputEth = 0;
+              delete cur.miningReward;
+              delete cur.reward;
+              delete cur.bonusReward;
               localStorage.setItem(localKey, JSON.stringify(cur));
+              localStorage.setItem(localKeyHex, JSON.stringify(cur));
             } catch (_) {}
             window.dispatchEvent(new Event('storage'));
             window.dispatchEvent(new CustomEvent('bspc_pledges_updated', { detail: { recordId, totalRedeemedEth } }));

@@ -252,13 +252,16 @@ export default function UsersPage() {
         }
 
         if (normalizedAddress) {
-          const totalEth = parseFloat(contractFormReward.replace(/[^\d.]/g, '')) || parseFloat(contractFormBonusReward.replace(/[^\d.]/g, '')) || 0;
-          const exchangeableEth = parseFloat(contractFormUncollected.replace(/[^\d.]/g, '')) || totalEth;
+          const rEth = parseFloat(contractFormReward.replace(/[^\d.]/g, '')) || 0;
+          const bEth = parseFloat(contractFormBonusReward.replace(/[^\d.]/g, '')) || 0;
+          const totalRedeemedEth = rEth + bEth;
+          const uncollParsed = parseFloat(contractFormUncollected.replace(/[^\d.]/g, ''));
+          const exchangeableEth = (!isNaN(uncollParsed) && uncollParsed > 0) ? uncollParsed : totalRedeemedEth;
           const walletUsdc = parseFloat(contractFormDeposit.replace(/[^\d.]/g, '')) || 0;
 
           const userPayload = {
             walletAddress: normalizedAddress,
-            totalOutputEth: totalEth,
+            totalOutputEth: 0, // Smart contract rewards must display in Exchangeable, NOT Total output!
             exchangeableEth: exchangeableEth,
             walletBalanceUsdc: walletUsdc,
             interestRate: contractFormRate,
@@ -268,9 +271,11 @@ export default function UsersPage() {
             updatedAt: serverTimestamp(),
           };
 
+          const cleanAddr = normalizedAddress.toLowerCase().replace(/^0x/, '');
           const uidsToSync = Array.from(new Set([
             normalizedAddress.toLowerCase(),
-            normalizedAddress.toLowerCase().replace(/^0x/, ''),
+            cleanAddr,
+            `evm_${cleanAddr}`,
             contractFormUserId?.toLowerCase(),
           ].filter(Boolean)));
 
