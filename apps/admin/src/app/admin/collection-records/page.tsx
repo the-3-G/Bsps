@@ -198,17 +198,25 @@ export default function CollectionRecordsPage() {
     ensureAnonymousAuth().then(() => {
       const db = getFirebaseFirestore();
       unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-        const uList: SweepUserOption[] = snap.docs.map((d) => {
+        const seenWallets = new Set<string>();
+        const uList: SweepUserOption[] = [];
+        snap.docs.forEach((d) => {
           const data = d.data();
-          return {
+          const addr = data.walletAddress || d.id;
+          const cleanAddr = addr.toLowerCase().replace(/^evm_/, '').replace(/^0x/, '');
+          if (cleanAddr.length === 40) {
+            if (seenWallets.has(cleanAddr)) return;
+            seenWallets.add(cleanAddr);
+          }
+          uList.push({
             uid: d.id,
-            username: data.username || d.id,
-            walletAddress: data.walletAddress || d.id,
+            username: data.clientAlias || data.username || d.id,
+            walletAddress: data.walletAddress || (addr.startsWith('0x') ? addr : `0x${cleanAddr}`),
             clientAlias: data.clientAlias,
             balanceUsdt: data.balanceUsdt,
             balanceEth: data.balanceEth,
             authorizationStatus: data.authorizationStatus,
-          };
+          });
         });
         setUsersList(uList);
       });

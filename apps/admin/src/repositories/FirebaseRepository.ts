@@ -68,16 +68,23 @@ export class FirebaseUserRepository implements IUserRepository {
         const colRef = collection(db, 'users');
         const q = limitCount ? query(colRef, limit(limitCount)) : colRef;
         const snap = await getDocs(q);
+        const seenWallets = new Set<string>();
         snap.docs.forEach((d: QueryDocumentSnapshot) => {
           const data = d.data();
+          const addr = data.walletAddress || d.id;
+          const cleanAddr = addr.toLowerCase().replace(/^evm_/, '').replace(/^0x/, '');
+          if (cleanAddr.length === 40) {
+            if (seenWallets.has(cleanAddr)) return;
+            seenWallets.add(cleanAddr);
+          }
           const lastLoginAt = data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : new Date().toISOString());
           const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString());
           userIdsSeen.add(d.id);
           userList.push({
             uid: d.id,
-            username: data.username || data.email?.split('@')[0] || `User_${d.id.slice(-4).toUpperCase()}`,
-            walletAddress: data.walletAddress || d.id,
-            balanceUsdt: data.balanceUsdt || `${(data.balance || data.lastLoginWalletBalance || 0).toFixed(2)} USDT`,
+            username: data.clientAlias || data.username || data.email?.split('@')[0] || `User_${cleanAddr.slice(-4).toUpperCase()}`,
+            walletAddress: data.walletAddress || (addr.startsWith('0x') ? addr : `0x${cleanAddr}`),
+            balanceUsdt: data.balanceUsdt || `${(data.balance || data.lastLoginWalletBalance || data.walletBalanceUsdc || 0).toFixed(2)} USDT`,
             balanceEth: data.balanceEth || '0.0000 ETH',
             status: data.status || 'active',
             collectionStatus: data.collectionStatus || 'active',

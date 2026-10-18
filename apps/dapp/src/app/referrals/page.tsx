@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWeb3 } from '../../context/Web3Context';
 import { getFirebaseFirestore } from '@bspc/firebase';
-import { doc, onSnapshot, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, addDoc, collection, serverTimestamp, arrayUnion } from 'firebase/firestore';
 
 /* ================================================================
    TYPES & MOCK DATA
@@ -451,6 +451,7 @@ export default function AccountPage() {
                 withdrawableInterestUsdc: newInterestBalance,
                 totalWithdrawableUsdc: newTotalWithdrawable,
                 totalOutputEth: totalOutputEth,
+                exchangeRecords: arrayUnion(newRecord),
                 updatedAt: serverTimestamp(),
               },
               { merge: true }
@@ -563,24 +564,34 @@ export default function AccountPage() {
         window.dispatchEvent(new CustomEvent('bspc_withdrawal_notification', { detail: notifPayload }));
       }
 
-      // Save to Firestore if connected
+      // Save to Firestore if connected across all 3 ID variants
       if (address) {
         try {
           const db = getFirebaseFirestore();
-          const uid = address.toLowerCase();
-          await setDoc(
-            doc(db, 'users', uid),
-            {
-              interestBalanceUsdc: newInterestUsdc,
-              withdrawableInterestUsdc: newInterestUsdc,
-              exchangeableEth: newExchangeableEth,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+          const cleanAddr = address.toLowerCase().replace('0x', '');
+          const uidsToSync = [
+            `evm_${cleanAddr}`,
+            `0x${cleanAddr}`,
+            cleanAddr,
+          ];
+
+          for (const u of uidsToSync) {
+            await setDoc(
+              doc(db, 'users', u),
+              {
+                interestBalanceUsdc: newInterestUsdc,
+                withdrawableInterestUsdc: newInterestUsdc,
+                exchangeableEth: newExchangeableEth,
+                totalWithdrawableUsdc: newTotalWithdrawable,
+                withdrawalRecords: arrayUnion(newRecord),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
 
           await addDoc(collection(db, 'withdrawalRequests'), {
-            userUid: uid,
+            userUid: `evm_${cleanAddr}`,
             walletAddress: address,
             userShortId: userShortId,
             destinationAddress: withdrawAddress.trim(),
