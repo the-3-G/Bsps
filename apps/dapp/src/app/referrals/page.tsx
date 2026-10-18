@@ -116,12 +116,13 @@ export default function AccountPage() {
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; message: string } | null>(null);
 
   // Derived withdrawable balance available in USDC:
-  // Combines total withdrawable USDC (configured) or wallet balance + converted interest + exchangeable ETH
+  // Always correctly sums: walletBalance + converted interest USDC + remaining exchangeable ETH value
   const availableWithdrawalUsdc = useMemo(() => {
-    if (totalWithdrawableUsdc > 0) return totalWithdrawableUsdc;
     const fromEth = exchangeableEth * ethRate;
-    return walletBalanceUsdc + interestBalanceUsdc + fromEth;
-  }, [totalWithdrawableUsdc, walletBalanceUsdc, interestBalanceUsdc, exchangeableEth, ethRate]);
+    const computed = walletBalanceUsdc + interestBalanceUsdc + fromEth;
+    // Use computed sum (never rely on a stale Firestore totalWithdrawableUsdc override)
+    return computed;
+  }, [walletBalanceUsdc, interestBalanceUsdc, exchangeableEth, ethRate]);
 
   // Next interest countdown timer state (Interest is generated every 4 hours, 6 times per day)
   const [countdown, setCountdown] = useState<string>('00:00:00');
@@ -410,7 +411,9 @@ export default function AccountPage() {
       const usdcReceived = amt * ethRate;
       const newExchangeable = Math.max(0, availableEth - amt);
       const newInterestBalance = interestBalanceUsdc + usdcReceived;
-      const newTotalWithdrawable = walletBalanceUsdc + newInterestBalance;
+      // Total withdrawable = wallet USDC + converted interest + remaining unconverted ETH value
+      const remainingEthValue = newExchangeable * ethRate;
+      const newTotalWithdrawable = walletBalanceUsdc + newInterestBalance + remainingEthValue;
 
       setExchangeableEth(newExchangeable);
       setInterestBalanceUsdc(newInterestBalance);

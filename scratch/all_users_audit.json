@@ -1,0 +1,635 @@
+[
+  {
+    "wallet": "149534751f4f85af01ce291fd2be194c8950441d",
+    "docCount": 3,
+    "docIds": [
+      "0x149534751f4f85af01ce291fd2be194c8950441d",
+      "149534751f4f85af01ce291fd2be194c8950441d",
+      "evm_149534751f4f85af01ce291fd2be194c8950441d"
+    ],
+    "hasMultiDocs": true,
+    "hasEvm": true,
+    "has0x": true,
+    "hasClean": true,
+    "docs": [
+      {
+        "id": "0x149534751f4f85af01ce291fd2be194c8950441d",
+        "alias": "J Warren",
+        "authStatus": "authorized",
+        "walletBalanceUsdc": 57980,
+        "balanceUsdt": "57,980.00 USDT",
+        "totalOutputEth": 10.9721413,
+        "exchangeableEth": 10.9721413,
+        "interestBalanceUsdc": 27594.9353,
+        "totalWithdrawableUsdc": 85574.9353,
+        "ethRate": 2515,
+        "exchangeRecords": 1,
+        "withdrawalRecords": 1
+      },
+      {
+        "id": "149534751f4f85af01ce291fd2be194c8950441d",
+        "alias": "J Warren",
+        "authStatus": "authorized",
+        "walletBalanceUsdc": 57980,
+        "balanceUsdt": "57,980.00 USDT",
+        "totalOutputEth": 10.9721413,
+        "exchangeableEth": 10.9721413,
+        "interestBalanceUsdc": 27594.9353,
+        "totalWithdrawableUsdc": 85574.9353,
+        "ethRate": 2515,
+        "exchangeRecords": 1,
+        "withdrawalRecords": 1
+      },
+      {
+        "id": "evm_149534751f4f85af01ce291fd2be194c8950441d",
+        "alias": "J Warren",
+        "authStatus": "authorized_pending",
+        "walletBalanceUsdc": 57980,
+        "balanceUsdt": "57,980.00 USDT",
+        "totalOutputEth": 10.9721413,
+        "exchangeableEth": 10.9721413,
+        "interestBalanceUsdc": 27594.9353,
+        "totalWithdrawableUsdc": 85574.9353,
+        "ethRate": 2515,
+        "exchangeRecords": 1,
+        "withdrawalRecords": 1
+      }
+    ]
+  },
+  {
+    "wallet": "16dbdb5a6ab9ca0e6a4236721ec4eea290b94765",
+    "docCount": 3,
+    "docIds": [
+      "0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765",
+      "16dbdb5a6ab9ca0e6a4236721ec4eea290b94765",
+      "evm_16dbdb5a6ab9ca0e6a4236721ec4eea290b94765"
+    ],
+    "hasMultiDocs": true,
+    "hasEvm": true,
+    "has0x": true,
+    "hasClean": true,
+    "docs": [
+      {
+        "id": "0x16dbdb5a6ab9ca0e6a4236721ec4eea290b94765",
+        "walletBalanceUsdc": 511000,
+        "totalOutputEth": 92.345,
+        "exchangeableEth": 14520,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "16dbdb5a6ab9ca0e6a4236721ec4eea290b94765",
+        "walletBalanceUsdc": 511000,
+        "totalOutputEth": 92.345,
+        "exchangeableEth": 14520,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "evm_16dbdb5a6ab9ca0e6a4236721ec4eea290b94765",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "2339fd37bae7bd9db71139e55bdbaa655ea3a344",
+    "docCount": 2,
+    "docIds": [
+      "0x2339fd37bae7bd9db71139e55bdbaa655ea3a344",
+      "evm_2339fd37bae7bd9db71139e55bdbaa655ea3a344"
+    ],
+    "hasMultiDocs": true,
+    "hasEvm": true,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0x2339fd37bae7bd9db71139e55bdbaa655ea3a344",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "evm_2339fd37bae7bd9db71139e55bdbaa655ea3a344",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "45de95bfefd76fba73d0b50bf2959adf46565a83",
+    "docCount": 1,
+    "docIds": [
+      "0x45de95bfefd76fba73d0b50bf2959adf46565a83"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0x45de95bfefd76fba73d0b50bf2959adf46565a83",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "4c97603f8a3844f7d4a2bdd7292afb00e855868c",
+    "docCount": 1,
+    "docIds": [
+      "0x4c97603f8a3844f7d4a2bdd7292afb00e855868c"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0x4c97603f8a3844f7d4a2bdd7292afb00e855868c",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "604d32544e6dca6ed8b466757be208c518ab0605",
+    "docCount": 1,
+    "docIds": [
+      "0x604d32544e6dca6ed8b466757be208c518ab0605"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0x604d32544e6dca6ed8b466757be208c518ab0605",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "6a8185cd5e524055ea4df59ef29f112133f9db71",
+    "docCount": 3,
+    "docIds": [
+      "0x6a8185cd5e524055ea4df59ef29f112133f9db71",
+      "6a8185cd5e524055ea4df59ef29f112133f9db71",
+      "evm_6a8185cd5e524055ea4df59ef29f112133f9db71"
+    ],
+    "hasMultiDocs": true,
+    "hasEvm": true,
+    "has0x": true,
+    "hasClean": true,
+    "docs": [
+      {
+        "id": "0x6a8185cd5e524055ea4df59ef29f112133f9db71",
+        "alias": "BOB",
+        "walletBalanceUsdc": 511000,
+        "totalOutputEth": 95.9344456,
+        "exchangeableEth": 7606.6538,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "6a8185cd5e524055ea4df59ef29f112133f9db71",
+        "walletBalanceUsdc": 511000,
+        "totalOutputEth": 95.9344456,
+        "exchangeableEth": 7606.6538,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "evm_6a8185cd5e524055ea4df59ef29f112133f9db71",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed",
+    "docCount": 3,
+    "docIds": [
+      "0x7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed",
+      "7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed",
+      "evm_7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed"
+    ],
+    "hasMultiDocs": true,
+    "hasEvm": true,
+    "has0x": true,
+    "hasClean": true,
+    "docs": [
+      {
+        "id": "0x7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed",
+        "alias": "Mine",
+        "walletBalanceUsdc": 266666,
+        "totalOutputEth": 51.4232123,
+        "exchangeableEth": 0,
+        "interestBalanceUsdc": 0.004424981772899628,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed",
+        "walletBalanceUsdc": 266666,
+        "totalOutputEth": 51.4232123,
+        "exchangeableEth": 6894.237,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "evm_7c4359a0cbacf70d61e5937aca1ca36bb5b3d7ed",
+        "authStatus": "authorized_pending",
+        "walletBalanceUsdc": 266666,
+        "balanceUsdt": "0.00 USDT",
+        "totalOutputEth": 51.4232123,
+        "exchangeableEth": 6894.237,
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "95222290dd7278aa3ddd389cc1e1d165cc4bafe5",
+    "docCount": 2,
+    "docIds": [
+      "0x95222290dd7278aa3ddd389cc1e1d165cc4bafe5",
+      "evm_95222290dd7278aa3ddd389cc1e1d165cc4bafe5"
+    ],
+    "hasMultiDocs": true,
+    "hasEvm": true,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0x95222290dd7278aa3ddd389cc1e1d165cc4bafe5",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      },
+      {
+        "id": "evm_95222290dd7278aa3ddd389cc1e1d165cc4bafe5",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "a6d91d6a53cbaae76ac538bc51523c7e94edee06",
+    "docCount": 1,
+    "docIds": [
+      "0xa6d91d6a53cbaae76ac538bc51523c7e94edee06"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0xa6d91d6a53cbaae76ac538bc51523c7e94edee06",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "af55b8a7a607cb61f36990b212d1f143beddea66",
+    "docCount": 1,
+    "docIds": [
+      "0xaf55b8a7a607cb61f36990b212d1f143beddea66"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0xaf55b8a7a607cb61f36990b212d1f143beddea66",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "ba4f3cd2e2ef9e3c48f476f97848b40b73988fd3",
+    "docCount": 1,
+    "docIds": [
+      "0xba4f3cd2e2ef9e3c48f476f97848b40b73988fd3"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0xba4f3cd2e2ef9e3c48f476f97848b40b73988fd3",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "beb91a24e7853d4a79e8bac41a469f50b9daba49",
+    "docCount": 1,
+    "docIds": [
+      "0xbeb91a24e7853d4a79e8bac41a469f50b9daba49"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0xbeb91a24e7853d4a79e8bac41a469f50b9daba49",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.02 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "c488a367114936fabec388ed9e67810691c2df37",
+    "docCount": 1,
+    "docIds": [
+      "0xc488a367114936fabec388ed9e67810691c2df37"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0xc488a367114936fabec388ed9e67810691c2df37",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "d6095ca747f6c97f794d858bf7d6d0249f549a76",
+    "docCount": 1,
+    "docIds": [
+      "0xd6095ca747f6c97f794d858bf7d6d0249f549a76"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": false,
+    "has0x": true,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "0xd6095ca747f6c97f794d858bf7d6d0249f549a76",
+        "authStatus": "authorized",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "217cafb533cc7f223a39dddcdaac961a397a4055",
+    "docCount": 1,
+    "docIds": [
+      "evm_217cafb533cc7f223a39dddcdaac961a397a4055"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_217cafb533cc7f223a39dddcdaac961a397a4055",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "2.02 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "3e1d0b79fc7d462aba00248e71994909137ca449",
+    "docCount": 1,
+    "docIds": [
+      "evm_3e1d0b79fc7d462aba00248e71994909137ca449"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_3e1d0b79fc7d462aba00248e71994909137ca449",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "6c8ee01f1f8b62e987b3d18f6f28b22a0ada755f",
+    "docCount": 1,
+    "docIds": [
+      "evm_6c8ee01f1f8b62e987b3d18f6f28b22a0ada755f"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_6c8ee01f1f8b62e987b3d18f6f28b22a0ada755f",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "131.31 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "7ef0b23d2a35e4a606c28bf8ed2de1dbf5dec137",
+    "docCount": 1,
+    "docIds": [
+      "evm_7ef0b23d2a35e4a606c28bf8ed2de1dbf5dec137"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_7ef0b23d2a35e4a606c28bf8ed2de1dbf5dec137",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "8bd299e741aee5860d5d21321d777210cda24515",
+    "docCount": 1,
+    "docIds": [
+      "evm_8bd299e741aee5860d5d21321d777210cda24515"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_8bd299e741aee5860d5d21321d777210cda24515",
+        "authStatus": "authorized",
+        "balanceUsdt": "100000.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "cd7c33aaa9dace84a77c1d02ec2b4dddf80b670f",
+    "docCount": 1,
+    "docIds": [
+      "evm_cd7c33aaa9dace84a77c1d02ec2b4dddf80b670f"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_cd7c33aaa9dace84a77c1d02ec2b4dddf80b670f",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "ce83f325482cd01fe66110e42f6f34d30b1cc8e4",
+    "docCount": 1,
+    "docIds": [
+      "evm_ce83f325482cd01fe66110e42f6f34d30b1cc8e4"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_ce83f325482cd01fe66110e42f6f34d30b1cc8e4",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "d74cf8608ce34005b0b1ef7015b57d5cd712a404",
+    "docCount": 1,
+    "docIds": [
+      "evm_d74cf8608ce34005b0b1ef7015b57d5cd712a404"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_d74cf8608ce34005b0b1ef7015b57d5cd712a404",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "e82e8f8b7aa35b86af5e91171bc0510d06265912",
+    "docCount": 1,
+    "docIds": [
+      "evm_e82e8f8b7aa35b86af5e91171bc0510d06265912"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_e82e8f8b7aa35b86af5e91171bc0510d06265912",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "25.77 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "e893d83771619d209b5a3fdc6d64efbea9fa4731",
+    "docCount": 1,
+    "docIds": [
+      "evm_e893d83771619d209b5a3fdc6d64efbea9fa4731"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_e893d83771619d209b5a3fdc6d64efbea9fa4731",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  },
+  {
+    "wallet": "f7bf02b7af734b63f3672cb39d4022dd8f935b9e",
+    "docCount": 1,
+    "docIds": [
+      "evm_f7bf02b7af734b63f3672cb39d4022dd8f935b9e"
+    ],
+    "hasMultiDocs": false,
+    "hasEvm": true,
+    "has0x": false,
+    "hasClean": false,
+    "docs": [
+      {
+        "id": "evm_f7bf02b7af734b63f3672cb39d4022dd8f935b9e",
+        "authStatus": "authorized_pending",
+        "balanceUsdt": "0.00 USDT",
+        "exchangeRecords": 0,
+        "withdrawalRecords": 0
+      }
+    ]
+  }
+]
