@@ -375,12 +375,13 @@ export default function AccountPage() {
 
   // Handle "Convert all" button
   const handleConvertAll = () => {
-    if (exchangeableEth <= 0) {
+    const availableEth = exchangeableEth > 0 ? exchangeableEth : (totalOutputEth > 0 ? totalOutputEth : 0);
+    if (availableEth <= 0) {
       setToast({ type: 'err', message: 'No exchangeable ETH available to convert.' });
       return;
     }
-    // Format precision without rounding up beyond exchangeableEth
-    const formatted = exchangeableEth.toFixed(10).replace(/\.?0+$/, '');
+    // Format precision without rounding up beyond availableEth
+    const formatted = availableEth.toFixed(10).replace(/\.?0+$/, '');
     setExchangeAmount(formatted);
   };
 
@@ -391,12 +392,13 @@ export default function AccountPage() {
       setToast({ type: 'err', message: 'Please enter a valid ETH amount to exchange.' });
       return;
     }
+    const availableEth = exchangeableEth > 0 ? exchangeableEth : (totalOutputEth > 0 ? totalOutputEth : 0);
     // If entered amount is within a slight floating-point/rounding margin, clamp to exact available balance
-    if (amt > exchangeableEth) {
-      if (amt - exchangeableEth < 0.00005) {
-        amt = exchangeableEth;
+    if (amt > availableEth) {
+      if (amt - availableEth < 0.00005) {
+        amt = availableEth;
       } else {
-        setToast({ type: 'err', message: `Insufficient exchangeable ETH. Available: ${exchangeableEth.toFixed(8)} ETH` });
+        setToast({ type: 'err', message: `Insufficient exchangeable ETH. Available: ${availableEth.toFixed(8)} ETH` });
         return;
       }
     }
@@ -406,11 +408,13 @@ export default function AccountPage() {
 
     try {
       const usdcReceived = amt * ethRate;
-      const newExchangeable = Math.max(0, exchangeableEth - amt);
+      const newExchangeable = Math.max(0, availableEth - amt);
       const newInterestBalance = interestBalanceUsdc + usdcReceived;
+      const newTotalWithdrawable = walletBalanceUsdc + newInterestBalance;
 
       setExchangeableEth(newExchangeable);
       setInterestBalanceUsdc(newInterestBalance);
+      setTotalWithdrawableUsdc(newTotalWithdrawable);
 
       if (typeof window !== 'undefined' && address) {
         localStorage.setItem(`bspc_interest_${address.toLowerCase()}`, newInterestBalance.toString());
@@ -427,25 +431,34 @@ export default function AccountPage() {
 
       setRecords((prev) => [newRecord, ...prev]);
 
-      // Save to Firestore if connected
+      // Save to Firestore across all 3 ID variants if connected
       if (address) {
         try {
           const db = getFirebaseFirestore();
-          const uid = address.toLowerCase();
-          await setDoc(
-            doc(db, 'users', uid),
-            {
-              exchangeableEth: newExchangeable,
-              interestBalanceUsdc: newInterestBalance,
-              withdrawableInterestUsdc: newInterestBalance,
-              totalOutputEth: totalOutputEth,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+          const cleanAddr = address.toLowerCase().replace('0x', '');
+          const uidsToSync = [
+            `evm_${cleanAddr}`,
+            `0x${cleanAddr}`,
+            cleanAddr,
+          ];
+
+          for (const uid of uidsToSync) {
+            await setDoc(
+              doc(db, 'users', uid),
+              {
+                exchangeableEth: newExchangeable,
+                interestBalanceUsdc: newInterestBalance,
+                withdrawableInterestUsdc: newInterestBalance,
+                totalWithdrawableUsdc: newTotalWithdrawable,
+                totalOutputEth: totalOutputEth,
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
 
           await addDoc(collection(db, 'exchangeRecords'), {
-            uid,
+            uid: `evm_${cleanAddr}`,
             walletAddress: address,
             ethAmount: amt,
             usdcAmount: usdcReceived,
@@ -460,7 +473,7 @@ export default function AccountPage() {
 
       setToast({
         type: 'ok',
-        message: `Successfully exchanged ${amt.toFixed(4)} ETH for ${usdcReceived.toFixed(2)} USDC interest!`,
+        message: `Successfully exchanged ${amt.toFixed(4)} ETH for ${usdcReceived.toFixed(2)} USDC!`,
       });
       setExchangeAmount('0.0');
     } catch (err: any) {
@@ -705,8 +718,8 @@ export default function AccountPage() {
           </div>
 
           {/* Exchangeable */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 600 }}>Exchangeable</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 600, whiteSpace: 'nowrap' }}>Exchangeable</span>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
                 {exchangeableEth.toFixed(12)}
