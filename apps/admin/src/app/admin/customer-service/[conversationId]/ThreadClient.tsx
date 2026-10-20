@@ -866,6 +866,15 @@ export function ThreadClient() {
         actions={
           <div className="flex items-center gap-2">
             {convDetails && <StatusBadge status={convDetails.status} />}
+            {convDetails?.status === 'blocked' && (
+              <button
+                type="button"
+                onClick={handleUnblockUser}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1 rounded-lg text-xs shadow-sm transition-colors"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" /> Unblock Support User
+              </button>
+            )}
             <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-200">
               {convDetails?.subject || 'Voucher Request'}
             </span>
@@ -1024,6 +1033,23 @@ export function ThreadClient() {
 
           {/* Quick Response Templates & Reply Form */}
           <div className="p-3 bg-white border-t border-gray-200 space-y-2">
+            {convDetails?.status === 'blocked' && (
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-700">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                  <div>
+                    <span className="font-bold">User is currently Blocked:</span> Support messaging is disabled.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleUnblockUser}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1 rounded text-xs inline-flex items-center gap-1.5 transition-colors shadow-sm shrink-0"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Unblock User Now
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
               <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 whitespace-nowrap">
                 <Sparkles className="w-3 h-3 text-amber-500" /> Templates:
