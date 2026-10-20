@@ -240,6 +240,27 @@ export default function CustomerServiceAdminPage() {
     }
   };
 
+  const handleUnblock = async (id: string) => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (useMock) {
+      setConversations((prev) =>
+        prev.map((c) => (c.conversationId === id ? { ...c, status: 'active' } : c))
+      );
+      return;
+    }
+
+    const db = getFirebaseFirestore();
+    try {
+      await updateDoc(doc(db, 'chatConversations', id), {
+        status: 'active',
+        blockReason: '',
+        updatedAt: serverTimestamp(),
+      });
+    } catch (fsErr) {
+      console.error('Firestore unblock failed:', fsErr);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -397,6 +418,14 @@ export default function CustomerServiceAdminPage() {
                 <td className="max-w-[220px] truncate text-gray-500">{c.lastMessage}</td>
                 <td className="text-gray-400 text-[11px]">{c.lastMessageTime}</td>
                 <td className="text-right space-x-1.5">
+                  {c.status === 'blocked' && (
+                    <button
+                      onClick={() => handleUnblock(c.conversationId)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition-colors shadow-sm"
+                    >
+                      Unblock
+                    </button>
+                  )}
                   {c.status === 'waiting' && (
                     <button
                       onClick={() => handleAssignToMe(c.conversationId)}
@@ -405,7 +434,7 @@ export default function CustomerServiceAdminPage() {
                       Assign to Me
                     </button>
                   )}
-                  {c.status !== 'closed' && (
+                  {c.status !== 'closed' && c.status !== 'blocked' && (
                     <button
                       onClick={() => handleClose(c.conversationId)}
                       className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold px-2 py-1 rounded transition-colors"

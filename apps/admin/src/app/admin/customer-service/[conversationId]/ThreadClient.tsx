@@ -820,6 +820,32 @@ export function ThreadClient() {
     }
   };
 
+  const handleUnblockUser = async () => {
+    if (!conversationId) return;
+    const db = getFirebaseFirestore();
+    const convDocRef = doc(db, 'chatConversations', conversationId);
+
+    try {
+      await updateDoc(convDocRef, {
+        status: 'active',
+        blockReason: '',
+        updatedAt: serverTimestamp(),
+      });
+      const msgsColRef = collection(db, 'chatConversations', conversationId, 'messages');
+      await addDoc(msgsColRef, {
+        senderType: 'system',
+        senderName: 'System',
+        text: 'User was unblocked by support agent.',
+        messageType: 'system',
+        timestamp: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+    } catch (fsErr) {
+      console.error('Firestore unblock failed:', fsErr);
+      setErrorMessage('Failed to unblock user.');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-xs">
@@ -1349,7 +1375,7 @@ Thank you for choosing BSP Smart Contract platform!`
               </div>
             </div>
 
-            {convDetails?.status !== 'blocked' && (
+            {convDetails?.status !== 'blocked' ? (
               <div className="pt-2 flex flex-col gap-2">
                 {convDetails?.status === 'closed' ? (
                   <button
@@ -1381,6 +1407,22 @@ Thank you for choosing BSP Smart Contract platform!`
                   className="w-full flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold py-1.5 rounded transition-colors"
                 >
                   <ShieldAlert className="w-3.5 h-3.5" /> Block Support User
+                </button>
+              </div>
+            ) : (
+              <div className="pt-2 flex flex-col gap-2">
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded text-xs text-red-700 flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold">User is Blocked</div>
+                    <div className="text-[10px] text-red-600">This user is currently blocked from support messaging.</div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleUnblockUser}
+                  className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded transition-colors text-xs shadow-sm"
+                >
+                  <ShieldCheck className="w-4 h-4" /> Unblock Support User
                 </button>
               </div>
             )}
