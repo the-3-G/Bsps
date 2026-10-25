@@ -34,13 +34,13 @@ interface DayReward {
 }
 
 const REWARD_SCHEDULE: DayReward[] = [
-  { day: 1, amount: 10, label: 'USDT Voucher' },
-  { day: 2, amount: 15, label: 'USDT Voucher' },
-  { day: 3, amount: 20, label: 'USDT Voucher' },
-  { day: 4, amount: 30, label: 'USDT Voucher', badge: 'Bonus' },
-  { day: 5, amount: 50, label: 'USDT Voucher' },
-  { day: 6, amount: 80, label: 'USDT Voucher', badge: 'Mega' },
-  { day: 7, amount: 150, label: 'Super Staking Voucher', badge: 'Super Box', isSpecial: true },
+  { day: 1, amount: 1.2, label: 'USDC Voucher' },
+  { day: 2, amount: 2.4, label: 'USDC Voucher' },
+  { day: 3, amount: 3.6, label: 'USDC Voucher' },
+  { day: 4, amount: 4.8, label: 'USDC Voucher', badge: 'Bonus' },
+  { day: 5, amount: 6.0, label: 'USDC Voucher' },
+  { day: 6, amount: 7.2, label: 'USDC Voucher', badge: 'Mega' },
+  { day: 7, amount: 8.4, label: 'Super Staking Voucher', badge: 'Super Box', isSpecial: true },
 ];
 
 function getUtcDateString(d = new Date()): string {
@@ -188,7 +188,7 @@ export function DailyCheckInModal({ isOpen, onClose, onConnectWallet }: DailyChe
     const nextStreak = lastCheckInDate === yesterdayUtc ? streak + 1 : 1;
     const rewardDay = ((nextStreak - 1) % 7) + 1;
     const reward = REWARD_SCHEDULE.find((r) => r.day === rewardDay) || REWARD_SCHEDULE[0];
-    const newTotal = totalClaimed + reward.amount;
+    const newTotal = parseFloat((totalClaimed + reward.amount).toFixed(2));
 
     // Update Local state
     setStreak(nextStreak);
@@ -446,7 +446,7 @@ export function DailyCheckInModal({ isOpen, onClose, onConnectWallet }: DailyChe
                 Total Claimed
               </div>
               <div style={{ fontSize: 15, fontWeight: 900, color: '#34D399' }}>
-                ${totalClaimed} USDT
+                {Number(totalClaimed || 0).toFixed(1)} USDC
               </div>
             </div>
           </div>
@@ -470,7 +470,7 @@ export function DailyCheckInModal({ isOpen, onClose, onConnectWallet }: DailyChe
             <Sparkles size={20} color="#34D399" />
             <div style={{ fontSize: 12, color: '#E2E8F0', flex: 1 }}>
               <span style={{ fontWeight: 800, color: '#34D399' }}>Day {justClaimedReward.day} Claimed! </span>
-              +${justClaimedReward.amount} {justClaimedReward.label} added to your account.
+              +{justClaimedReward.amount.toFixed(1)} {justClaimedReward.label} added to your account.
             </div>
           </div>
         )}
@@ -624,8 +624,8 @@ export function DailyCheckInModal({ isOpen, onClose, onConnectWallet }: DailyChe
                           : '#E2E8F0',
                       }}
                     >
-                      +{item.amount}
-                      <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 2 }}>USDT</span>
+                      +{item.amount.toFixed(1)}
+                      <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 2 }}>USDC</span>
                     </div>
                     {isPastClaimed && (
                       <span style={{ fontSize: 8, color: '#34D399', fontWeight: 800 }}>
@@ -689,9 +689,9 @@ export function DailyCheckInModal({ isOpen, onClose, onConnectWallet }: DailyChe
               <Sparkles size={18} />
               {isClaiming
                 ? 'Claiming Reward...'
-                : `Claim Day ${currentDayIndex} Reward (+${
-                    REWARD_SCHEDULE.find((r) => r.day === currentDayIndex)?.amount || 10
-                  } USDT)`}
+                : `Claim Day ${currentDayIndex} Reward (+${(
+                    REWARD_SCHEDULE.find((r) => r.day === currentDayIndex)?.amount ?? 1.2
+                  ).toFixed(1)} USDC)`}
             </button>
           )}
 
