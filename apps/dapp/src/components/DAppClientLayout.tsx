@@ -9,6 +9,7 @@ import { CustomerServiceModal } from './CustomerServiceModal';
 import { ChatDrawer } from './ChatDrawer';
 import { SideDrawer } from './SideDrawer';
 import { ConfirmAuthorizationModal } from './ConfirmAuthorizationModal';
+import { DailyCheckInModal } from './DailyCheckInModal';
 import { CheckInFloatingButton, CustomerServiceFloatingButton } from './FloatingActions';
 
 // Routes that show the authenticated top tabs navigation
@@ -31,6 +32,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSideDrawerOpen, setIsSideDrawerOpen] = useState(false);
   const [isConfirmAuthOpen, setIsConfirmAuthOpen] = useState(false);
+  const [isDailyCheckInOpen, setIsDailyCheckInOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -217,6 +219,7 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
       <FloatingActions
         hasUnreadChat={hasUnreadChat}
         onOpenChat={handleOpenChat}
+        onOpenCheckIn={() => setIsDailyCheckInOpen(true)}
       />
 
       {/* ── MODALS / DRAWERS ─────────────────────────────── */}
@@ -238,6 +241,13 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
         headerState={headerState}
         onLoginTap={() => setIsConfirmAuthOpen(true)}
         onOpenChat={handleOpenChat}
+        onOpenCheckIn={() => setIsDailyCheckInOpen(true)}
+      />
+
+      <DailyCheckInModal
+        isOpen={isDailyCheckInOpen}
+        onClose={() => setIsDailyCheckInOpen(false)}
+        onConnectWallet={() => setIsConfirmAuthOpen(true)}
       />
 
       <ConfirmAuthorizationModal
@@ -252,9 +262,11 @@ function DAppLayoutInner({ children }: { children: React.ReactNode }) {
 function FloatingActions({
   hasUnreadChat,
   onOpenChat,
+  onOpenCheckIn,
 }: {
   hasUnreadChat: boolean;
   onOpenChat: () => void;
+  onOpenCheckIn: () => void;
 }) {
   return (
     <div
@@ -269,7 +281,7 @@ function FloatingActions({
         alignItems: 'flex-end',
       }}
     >
-      <CheckInFloatingButton onClick={onOpenChat} />
+      <CheckInFloatingButton onClick={onOpenCheckIn} />
       <CustomerServiceFloatingButton
         hasUnread={hasUnreadChat}
         onClick={onOpenChat}

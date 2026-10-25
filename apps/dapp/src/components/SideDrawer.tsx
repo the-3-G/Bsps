@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Home, Image, TrendingUp, Cpu, FileText, UserCheck, MessageSquare } from 'lucide-react';
+import { ChevronRight, Home, Image, TrendingUp, Cpu, FileText, UserCheck, MessageSquare, Calendar } from 'lucide-react';
 
 interface SideDrawerProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface SideDrawerProps {
   headerState: 'guest' | 'voucher_requested';
   onLoginTap: () => void;
   onOpenChat: () => void;
+  onOpenCheckIn?: () => void;
 }
 
 const MENU_ITEMS = [
@@ -23,7 +24,7 @@ const MENU_ITEMS = [
   { label: 'Account',   href: '/referrals', icon: UserCheck },
 ];
 
-export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenChat }: SideDrawerProps) {
+export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenChat, onOpenCheckIn }: SideDrawerProps) {
   const router = useRouter();
   // Lock body scroll when open
   useEffect(() => {
@@ -175,6 +176,53 @@ export function SideDrawer({ isOpen, onClose, headerState, onLoginTap, onOpenCha
 
           {/* Divider */}
           <div style={{ height: 1, background: 'rgba(255,211,77,0.1)', margin: '12px 0' }} />
+
+          {/* Daily Check-In & Rewards */}
+          {onOpenCheckIn && (
+            <button
+              onClick={() => {
+                onClose();
+                onOpenCheckIn();
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(255,211,77,0.3)',
+                cursor: 'pointer',
+                background: 'linear-gradient(135deg, rgba(255,211,77,0.15) 0%, rgba(218,165,32,0.08) 100%)',
+                textAlign: 'left',
+                marginBottom: 10,
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: 'rgba(255,211,77,0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Calendar size={18} color="#FFD34D" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#FFD34D', fontSize: 14, fontWeight: 800 }}>
+                  Daily Check-In
+                </div>
+                <div style={{ color: '#94A3B8', fontSize: 10 }}>
+                  Claim Daily Login Rewards
+                </div>
+              </div>
+              <ChevronRight size={16} color="#FFD34D" />
+            </button>
+          )}
 
           {/* Account Login / Customer Service */}
           {headerState === 'guest' ? (
