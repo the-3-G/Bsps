@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { PageHeader, StatusBadge } from '../../../components/ui/Reusables';
 import { useAuth } from '../../../context/AuthContext';
-import { ShieldCheck, Smartphone, ShieldAlert, Ban } from 'lucide-react';
+import { ShieldCheck, Smartphone, ShieldAlert, Ban, KeyRound, Lock } from 'lucide-react';
+import { ChangePasswordModal } from '../../../components/ChangePasswordModal';
 
 interface MockSecurityEvent {
   id: string;
@@ -48,6 +49,7 @@ const mockSecurityEvents: MockSecurityEvent[] = [
 export default function SecurityPage() {
   const { userEmail, userRole, isMfaEnabled, activeSessions, revokeSession } = useAuth();
   const [sessions, setSessions] = useState(activeSessions);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const handleRevoke = (deviceId: string) => {
     revokeSession(deviceId);
@@ -59,6 +61,14 @@ export default function SecurityPage() {
       <PageHeader
         title="Admin Security Portal"
         subtitle="Review security configurations, multi-factor authentication, active sessions, and gateway events."
+        actions={
+          <button
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="flex items-center gap-1.5 bg-teal-primary hover:bg-teal-hover text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+          >
+            <KeyRound className="w-3.5 h-3.5" /> Change Password
+          </button>
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -167,27 +177,40 @@ export default function SecurityPage() {
             </div>
           </div>
 
-          {/* MFA Status Card */}
+          {/* Administrator Password Card */}
           <div className="bg-white rounded border border-gray-200 shadow-sm p-4 space-y-4">
             <h2 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-2">
-              <Smartphone className="w-4 h-4 text-teal-primary" /> Multi-Factor Setup
+              <KeyRound className="w-4 h-4 text-teal-primary" /> Administrator Password
             </h2>
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded ${isMfaEnabled ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                {isMfaEnabled ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
-              </div>
-              <div>
-                <div className="text-xs font-bold text-gray-800">
-                  {isMfaEnabled ? 'MFA Configured & Enforced' : 'MFA Required'}
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Your password secures all privileged access to user wallets, funds, and platform controls.
+              </p>
+              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg space-y-1">
+                <div className="text-[11px] font-semibold text-gray-800 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-teal-600" /> Firebase Auth Guard
                 </div>
-                <div className="text-[10px] text-gray-500 mt-0.5">
-                  {isMfaEnabled ? 'Device authorization via Totp Authenticator' : 'Configure MFA device to enable access'}
+                <div className="text-[10px] text-gray-500">
+                  Minimum 8 characters with credential verification enforced.
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordOpen(true)}
+                className="w-full flex items-center justify-center gap-1.5 bg-teal-primary hover:bg-teal-hover text-white font-bold py-2 rounded-lg text-xs transition-colors shadow-sm"
+              >
+                <KeyRound className="w-3.5 h-3.5" /> Change Admin Password
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
     </div>
   );
 }

@@ -14,7 +14,9 @@ import {
   LogOut,
   Settings,
   HelpCircle,
+  KeyRound,
 } from 'lucide-react';
+import { ChangePasswordModal } from './ChangePasswordModal';
 
 import { getFirebaseFirestore } from '@bspc/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
@@ -52,6 +54,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   const { logout, userEmail, userRole } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 
@@ -630,16 +633,31 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                   <div className="text-[10px] text-teal-600 font-bold uppercase tracking-wide mt-0.5">{userRole || 'super_admin'}</div>
                 </div>
                 <button
-                  onClick={() => setIsUserDropdownOpen(false)}
+                  onClick={() => {
+                    setIsUserDropdownOpen(false);
+                    router.push('/admin/security');
+                  }}
                   className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100 text-left transition-colors"
                 >
                   <User className="w-4 h-4 text-gray-400" /> My Profile
                 </button>
                 <button
-                  onClick={() => setIsUserDropdownOpen(false)}
+                  onClick={() => {
+                    setIsUserDropdownOpen(false);
+                    setIsChangePasswordOpen(true);
+                  }}
+                  className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100 text-left transition-colors font-medium text-teal-800 bg-teal-50/50"
+                >
+                  <KeyRound className="w-4 h-4 text-teal-600" /> Change Password
+                </button>
+                <button
+                  onClick={() => {
+                    setIsUserDropdownOpen(false);
+                    router.push('/admin/security');
+                  }}
                   className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100 text-left transition-colors"
                 >
-                  <Settings className="w-4 h-4 text-gray-400" /> Settings
+                  <Settings className="w-4 h-4 text-gray-400" /> Security Settings
                 </button>
                 <button
                   onClick={() => setIsUserDropdownOpen(false)}
@@ -659,6 +677,12 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
     </header>
   );
 };

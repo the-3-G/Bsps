@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { UserRole } from '@bspc/types';
 import { getFirebaseAuth } from '@bspc/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
 const VALID_ADMIN_ROLES: UserRole[] = ['super_admin', 'operations_admin', 'finance_reviewer', 'support', 'auditor', 'read_only'];
@@ -25,6 +25,7 @@ interface AuthContextType {
   login: (email: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   reauthenticate: (password: string) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   revokeSession: (deviceId: string) => void;
 }
 
@@ -161,6 +162,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return Boolean(password);
   };
 
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+    if (isMock) {
+      await new Promise((r) => setTimeout(r, 600));
+      return { success: true };
+    }
+
+    try {
+      const auth = getFirebaseAuth();
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        return { success: false, error: 'No active administrator session found. Please re-login.' };
+      }
+
+      // 1. Verify current credentials
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // 2. Update to new password
+      await updatePassword(user, newPassword);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Change password failed:', err);
+      if (
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential'
+      ) {
+        return { success: false, error: 'Current password is incorrect. Please check and try again.' };
+      }
+      if (err.code === 'auth/weak-password') {
+        return { success: false, error: 'New password is too weak. Please use at least 8 characters.' };
+      }
+      if (err.code === 'auth/requires-recent-login') {
+        return { success: false, error: 'Session expired. Please log out and log back in before changing your password.' };
+      }
+      if (err.code === 'auth/too-many-requests') {
+        return { success: false, error: 'Too many attempts. Please try again in a few moments.' };
+      }
+      return { success: false, error: err.message || 'Failed to update password.' };
+    }
+  };
+
   const revokeSession = (deviceId: string) => {
     setActiveSessions((prev) => prev.filter((s) => s.deviceId !== deviceId));
   };
@@ -176,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         reauthenticate,
+        changePassword,
         revokeSession,
       }}
     >
