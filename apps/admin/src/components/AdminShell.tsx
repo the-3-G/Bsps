@@ -17,7 +17,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  if (pathname === '/login') {
+  if (pathname === '/' || pathname === '/login' || pathname?.startsWith('/revenue')) {
     return <>{children}</>;
   }
 
